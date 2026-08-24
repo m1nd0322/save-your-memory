@@ -36,6 +36,55 @@ class SettingsTests(unittest.TestCase):
             self.assertEqual(settings.home, home.resolve())
             self.assertEqual(settings.max_file_bytes, 456)
 
+    def test_loads_exclusion_and_chunk_settings_from_env(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            root = base / "source"
+            home = base / "wiki-home"
+            root.mkdir()
+            settings = Settings.load(
+                env={
+                    "SAVE_YOUR_MEMORY_ROOT": str(root),
+                    "SAVE_YOUR_MEMORY_HOME": str(home),
+                    "SAVE_YOUR_MEMORY_EXCLUDED_DIRECTORIES": "vendor, downloads",
+                    "SAVE_YOUR_MEMORY_EXCLUDED_DIRECTORY_GLOBS": "cache-*",
+                    "SAVE_YOUR_MEMORY_EXCLUDED_EXTENSIONS": ".csv, .tsv",
+                    "SAVE_YOUR_MEMORY_CHUNK_BYTES": "4096",
+                },
+                env_file=None,
+            )
+
+            self.assertIn("vendor", settings.excluded_directories)
+            self.assertIn("downloads", settings.excluded_directories)
+            self.assertIn("cache-*", settings.excluded_directory_globs)
+            self.assertIn(".csv", settings.excluded_extensions)
+            self.assertIn(".tsv", settings.excluded_extensions)
+            self.assertEqual(settings.chunk_bytes, 4096)
+
+    def test_directory_globs_exclude_downloaded_library_trees(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            root = base / "source"
+            root.mkdir()
+            for directory in ("library.git", "cache-model"):
+                child = root / directory
+                child.mkdir()
+                (child / "ignored.txt").write_text("ignored", encoding="utf-8")
+            (root / "keep.md").write_text("keep", encoding="utf-8")
+            settings = Settings.load(
+                env={
+                    "SAVE_YOUR_MEMORY_ROOT": str(root),
+                    "SAVE_YOUR_MEMORY_EXCLUDED_DIRECTORY_GLOBS": "cache-*",
+                },
+                env_file=None,
+            )
+
+            paths = {entry.relative_path.as_posix() for entry in scan_tree(settings).entries}
+
+            self.assertIn("keep.md", paths)
+            self.assertNotIn("library.git", paths)
+            self.assertNotIn("cache-model", paths)
+
     def test_missing_or_invalid_root_is_rejected(self) -> None:
         with self.assertRaisesRegex(ConfigurationError, "SAVE_YOUR_MEMORY_ROOT"):
             Settings.load(env={}, env_file=None)
@@ -74,6 +123,10 @@ class ScannerTests(unittest.TestCase):
             (home / "must-not-index.md").write_text("generated", encoding="utf-8")
             (root / ".git").mkdir()
             (root / ".git" / "config").write_text("secret", encoding="utf-8")
+            for excluded in ("venv", "site-packages", "build", "dist", "downloads"):
+                (root / excluded).mkdir()
+                (root / excluded / "ignored.txt").write_text("ignored", encoding="utf-8")
+            (root / "report.csv").write_text("id,value", encoding="utf-8")
 
             settings = Settings.load(
                 env={
@@ -91,6 +144,12 @@ class ScannerTests(unittest.TestCase):
             self.assertEqual(paths["notes/deep/detail.md"], "file")
             self.assertNotIn("generated", paths)
             self.assertNotIn(".git", paths)
+            self.assertNotIn("venv", paths)
+            self.assertNotIn("site-packages", paths)
+            self.assertNotIn("build", paths)
+            self.assertNotIn("dist", paths)
+            self.assertNotIn("downloads", paths)
+            self.assertNotIn("report.csv", paths)
             self.assertEqual(result.errors, ())
 
     def test_does_not_follow_directory_symlinks(self) -> None:

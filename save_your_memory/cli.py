@@ -82,7 +82,7 @@ def _sync_payload(sync: SyncSummary) -> dict[str, object]:
 
 def _run_index(settings: Settings, as_json: bool, retry_unreadable: bool) -> int:
     scan = scan_tree(settings)
-    with Catalog(settings.home / "index.sqlite3") as catalog:
+    with Catalog(settings.home / "index.sqlite3", chunk_bytes=settings.chunk_bytes) as catalog:
         retry_statuses = (
             frozenset({"unsupported", "error"})
             if retry_unreadable
@@ -110,7 +110,7 @@ def _run_index(settings: Settings, as_json: bool, retry_unreadable: bool) -> int
 def _run_query(settings: Settings, question: str, limit: int, as_json: bool) -> int:
     if limit <= 0:
         raise ConfigurationError("--limit must be greater than zero")
-    with Catalog(settings.home / "index.sqlite3") as catalog:
+    with Catalog(settings.home / "index.sqlite3", chunk_bytes=settings.chunk_bytes) as catalog:
         hits = catalog.search(question, limit=limit)
         compiler = WikiCompiler(settings, catalog)
         compiler.append_query(question, len(hits))
@@ -135,7 +135,7 @@ def _run_query(settings: Settings, question: str, limit: int, as_json: bool) -> 
 
 
 def _run_status(settings: Settings, as_json: bool) -> int:
-    with Catalog(settings.home / "index.sqlite3") as catalog:
+    with Catalog(settings.home / "index.sqlite3", chunk_bytes=settings.chunk_bytes) as catalog:
         records = catalog.iter_records(include_content=False)
         file_count = 0
         directory_count = 0
@@ -162,7 +162,7 @@ def _run_status(settings: Settings, as_json: bool) -> int:
 
 
 def _run_lint(settings: Settings, as_json: bool) -> int:
-    with Catalog(settings.home / "index.sqlite3") as catalog:
+    with Catalog(settings.home / "index.sqlite3", chunk_bytes=settings.chunk_bytes) as catalog:
         report = WikiCompiler(settings, catalog).lint()
     payload: dict[str, object] = {
         "command": "lint",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import stat
+from fnmatch import fnmatchcase
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -33,6 +34,12 @@ def scan_tree(settings: Settings) -> ScanResult:
     entries: list[ScanEntry] = []
     errors: list[str] = []
     excluded_names = {name.casefold() for name in settings.excluded_directories}
+    excluded_directory_globs = tuple(
+        pattern.casefold() for pattern in settings.excluded_directory_globs
+    )
+    excluded_extensions = {
+        extension.casefold() for extension in settings.excluded_extensions
+    }
     root = settings.root
     home = settings.home
 
@@ -56,7 +63,11 @@ def scan_tree(settings: Settings) -> ScanResult:
                 continue
             try:
                 if child.is_dir(follow_symlinks=False):
-                    if child.name.casefold() in excluded_names:
+                    folded_name = child.name.casefold()
+                    if folded_name in excluded_names or any(
+                        fnmatchcase(folded_name, pattern)
+                        for pattern in excluded_directory_globs
+                    ):
                         continue
                     if path.resolve(strict=False) == home:
                         continue
@@ -71,6 +82,8 @@ def scan_tree(settings: Settings) -> ScanResult:
                     )
                     visit(path)
                 elif child.is_file(follow_symlinks=False):
+                    if path.suffix.casefold() in excluded_extensions:
+                        continue
                     entries.append(
                         ScanEntry(
                             absolute_path=path,

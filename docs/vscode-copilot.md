@@ -39,11 +39,19 @@ VS Code의 Agent Plugins 기능은 workspace 설정에서 활성화돼 있습니
 SAVE_YOUR_MEMORY_ROOT="D:\Documents\Knowledge"
 SAVE_YOUR_MEMORY_HOME="D:\SaveYourMemoryData"
 SAVE_YOUR_MEMORY_MAX_FILE_BYTES=26214400
+SAVE_YOUR_MEMORY_EXCLUDED_DIRECTORIES="vendor, third_party"
+SAVE_YOUR_MEMORY_EXCLUDED_DIRECTORY_GLOBS="cache-*"
+SAVE_YOUR_MEMORY_EXCLUDED_EXTENSIONS=".csv, .tsv"
+SAVE_YOUR_MEMORY_CHUNK_BYTES=32768
 ```
 
 - `SAVE_YOUR_MEMORY_ROOT`: 읽기 전용으로 인덱싱할 부모 폴더
 - `SAVE_YOUR_MEMORY_HOME`: SQLite 인덱스와 Markdown 위키가 생성될 별도 폴더
 - `SAVE_YOUR_MEMORY_MAX_FILE_BYTES`: 파일 하나당 추출 허용 크기
+- `SAVE_YOUR_MEMORY_EXCLUDED_DIRECTORIES`: 추가로 제외할 디렉터리 이름
+- `SAVE_YOUR_MEMORY_EXCLUDED_DIRECTORY_GLOBS`: 추가로 제외할 디렉터리 이름 glob 패턴
+- `SAVE_YOUR_MEMORY_EXCLUDED_EXTENSIONS`: 추가로 제외할 파일 확장자
+- `SAVE_YOUR_MEMORY_CHUNK_BYTES`: FTS5 external-content 청크 크기
 
 ## Copilot Chat에서 사용
 

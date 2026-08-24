@@ -187,16 +187,19 @@ class WikiCompiler:
         )
         changed = set(sync.changed_paths)
         source_pages = 0
-        for record in self.catalog.iter_records():
-            if record.kind != "file":
+        for metadata in self.catalog.iter_records(include_content=False):
+            if metadata.kind != "file":
                 continue
-            wiki_path = self._wiki_relative_path(record)
+            wiki_path = self._wiki_relative_path(metadata)
             destination = self.settings.home / wiki_path
             if (
-                record.relative_path in changed
-                or record.wiki_path != wiki_path
+                metadata.relative_path in changed
+                or metadata.wiki_path != wiki_path
                 or not destination.exists()
             ):
+                record = self.catalog.get(metadata.relative_path)
+                if record is None:
+                    continue
                 self._write_source_page(record, wiki_path)
                 source_pages += 1
         self._write_navigation(self.catalog.iter_records(include_content=False))

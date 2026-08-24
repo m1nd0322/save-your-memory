@@ -2,6 +2,7 @@ import json
 import re
 import subprocess
 import sys
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -15,6 +16,12 @@ AGENT_PLUGIN_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.jso
 class CopilotAgentPluginTests(unittest.TestCase):
     def test_agent_plugin_manifest_exposes_matching_portable_skill(self) -> None:
         manifest = json.loads((PROJECT_ROOT / "plugin.json").read_text(encoding="utf-8"))
+        codex_manifest = json.loads(
+            (PROJECT_ROOT / ".codex-plugin/plugin.json").read_text(encoding="utf-8")
+        )
+        project = tomllib.loads(
+            (PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        )
         skill_path = PROJECT_ROOT / "skills/save-your-memory/SKILL.md"
         skill_text = skill_path.read_text(encoding="utf-8")
         skill_name = re.search(r"^name:\s*([^\s]+)$", skill_text, flags=re.MULTILINE)
@@ -22,6 +29,8 @@ class CopilotAgentPluginTests(unittest.TestCase):
         self.assertEqual(manifest["$schema"], AGENT_PLUGIN_SCHEMA)
         self.assertEqual(manifest["name"], "save-your-memory")
         self.assertEqual(manifest["version"], __version__)
+        self.assertEqual(codex_manifest["version"], __version__)
+        self.assertEqual(project["project"]["version"], __version__)
         self.assertTrue(skill_path.is_file())
         self.assertIsNotNone(skill_name)
         self.assertEqual(skill_name.group(1), skill_path.parent.name)

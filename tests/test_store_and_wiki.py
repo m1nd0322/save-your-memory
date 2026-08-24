@@ -6,7 +6,7 @@ from pathlib import Path
 
 from save_your_memory.config import Settings
 from save_your_memory.scanner import scan_tree
-from save_your_memory.store import Catalog
+from save_your_memory.store import Catalog, CatalogError
 from save_your_memory.wiki import WikiCompiler
 
 
@@ -57,6 +57,221 @@ class CatalogAndWikiTests(unittest.TestCase):
             self.assertIn("Delta", hits[0].excerpt)
             self.assertIn("notes/delta.md", (home / "wiki/index.md").read_text("utf-8"))
             self.assertIn("Ingest", (home / "wiki/log.md").read_text("utf-8"))
+
+    def test_sync_chunks_text_into_external_content_tables_and_searches_one_hit_per_file(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            root = base / "source"
+            home = base / "memory"
+            notes = root / "notes"
+            notes.mkdir(parents=True)
+            source = notes / "chunked.md"
+            source.write_text(
+                "Alpha evidence line one.\n"
+                "Bravo evidence line two.\n"
+                "Charlie evidence line three.\n"
+                "Delta evidence line four.\n"
+                "Echo evidence line five.\n",
+                encoding="utf-8",
+            )
+            settings = Settings.load(
+                env={
+                    "SAVE_YOUR_MEMORY_ROOT": str(root),
+                    "SAVE_YOUR_MEMORY_HOME": str(home),
+                    "SAVE_YOUR_MEMORY_CHUNK_BYTES": "64",
+                },
+                env_file=None,
+            )
+
+            with Catalog(home / "index.sqlite3", chunk_bytes=settings.chunk_bytes) as catalog:
+                sync = catalog.sync(scan_tree(settings), settings.max_file_bytes)
+                record = catalog.get("notes/chunked.md")
+                hits = catalog.search("evidence", limit=10)
+                table_names = {
+                    row[0]
+                    for row in catalog.connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    )
+                }
+                chunk_rows = catalog.connection.execute(
+                    """
+                    SELECT chunk_index, content
+                    FROM catalog_chunks
+                    ORDER BY chunk_index
+                    """
+                ).fetchall()
+
+            self.assertEqual(sync.added, 2)
+            self.assertGreater(len(chunk_rows), 1)
+            expected = source.read_text(encoding="utf-8").replace("\r\n", "\n")
+            self.assertEqual(record.content.replace("\r\n", "\n"), expected)
+            self.assertNotIn("catalog_search_content", table_names)
+            self.assertIn("catalog_chunks", table_names)
+            self.assertEqual([hit.relative_path for hit in hits], ["notes/chunked.md"])
+            self.assertIn("evidence", hits[0].excerpt)
+
+    def test_chunking_preserves_multibyte_text_below_one_codepoint_byte_width(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            root = base / "source"
+            home = base / "memory"
+            root.mkdir()
+            source = root / "korean.txt"
+            original = "가나다라마바사"
+            source.write_text(original, encoding="utf-8")
+            settings = Settings.load(
+                env={
+                    "SAVE_YOUR_MEMORY_ROOT": str(root),
+                    "SAVE_YOUR_MEMORY_HOME": str(home),
+                    "SAVE_YOUR_MEMORY_CHUNK_BYTES": "1",
+                },
+                env_file=None,
+            )
+
+            with Catalog(home / "index.sqlite3", chunk_bytes=1) as catalog:
+                catalog.sync(scan_tree(settings), settings.max_file_bytes)
+                record = catalog.get("korean.txt")
+
+            self.assertEqual(record.content, original)
+
+    def test_an_over_budget_token_stays_intact_and_searchable(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            root = base / "source"
+            home = base / "memory"
+            root.mkdir()
+            token = "supercalifragilisticexpialidocious"
+            (root / "token.txt").write_text(token, encoding="utf-8")
+            settings = Settings.load(
+                env={
+                    "SAVE_YOUR_MEMORY_ROOT": str(root),
+                    "SAVE_YOUR_MEMORY_HOME": str(home),
+                },
+                env_file=None,
+            )
+
+            with Catalog(home / "index.sqlite3", chunk_bytes=8) as catalog:
+                catalog.sync(scan_tree(settings), settings.max_file_bytes)
+                chunks = [
+                    row[0]
+                    for row in catalog.connection.execute(
+                        "SELECT content FROM catalog_chunks ORDER BY chunk_index"
+                    )
+                ]
+                hits = catalog.search(token)
+
+            self.assertEqual(chunks, [token])
+            self.assertEqual([hit.relative_path for hit in hits], ["token.txt"])
+
+    def test_only_the_first_chunk_indexes_the_repeated_relative_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            root = base / "source"
+            home = base / "memory"
+            root.mkdir()
+            (root / "long-note.txt").write_text("word " * 100, encoding="utf-8")
+            settings = Settings.load(
+                env={
+                    "SAVE_YOUR_MEMORY_ROOT": str(root),
+                    "SAVE_YOUR_MEMORY_HOME": str(home),
+                },
+                env_file=None,
+            )
+
+            with Catalog(home / "index.sqlite3", chunk_bytes=24) as catalog:
+                catalog.sync(scan_tree(settings), settings.max_file_bytes)
+                paths = [
+                    row[0]
+                    for row in catalog.connection.execute(
+                        "SELECT relative_path FROM catalog_chunks ORDER BY chunk_index"
+                    )
+                ]
+
+            self.assertGreater(len(paths), 1)
+            self.assertEqual(paths[0], "long-note.txt")
+            self.assertTrue(all(path == "" for path in paths[1:]))
+
+    def test_search_returns_distinct_files_when_one_file_has_many_top_chunks(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            root = base / "source"
+            home = base / "memory"
+            root.mkdir()
+            (root / "dense.txt").write_text(
+                "needle needle needle\n" * 80,
+                encoding="utf-8",
+            )
+            (root / "single.txt").write_text("needle", encoding="utf-8")
+            settings = Settings.load(
+                env={
+                    "SAVE_YOUR_MEMORY_ROOT": str(root),
+                    "SAVE_YOUR_MEMORY_HOME": str(home),
+                },
+                env_file=None,
+            )
+
+            with Catalog(home / "index.sqlite3", chunk_bytes=24) as catalog:
+                catalog.sync(scan_tree(settings), settings.max_file_bytes)
+                hits = catalog.search("needle", limit=2)
+
+            self.assertEqual(
+                {hit.relative_path for hit in hits},
+                {"dense.txt", "single.txt"},
+            )
+
+    def test_search_combines_same_chunk_and_cross_chunk_file_matches(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            root = base / "source"
+            home = base / "memory"
+            root.mkdir()
+            (root / "same.txt").write_text("red blue", encoding="utf-8")
+            (root / "split.txt").write_text(
+                "red xxxxxxxx blue",
+                encoding="utf-8",
+            )
+            settings = Settings.load(
+                env={
+                    "SAVE_YOUR_MEMORY_ROOT": str(root),
+                    "SAVE_YOUR_MEMORY_HOME": str(home),
+                },
+                env_file=None,
+            )
+
+            with Catalog(home / "index.sqlite3", chunk_bytes=16) as catalog:
+                catalog.sync(scan_tree(settings), settings.max_file_bytes)
+                hits = catalog.search("red blue", limit=5)
+
+            self.assertEqual(
+                {hit.relative_path for hit in hits},
+                {"same.txt", "split.txt"},
+            )
+
+    def test_opening_a_legacy_catalog_requires_an_explicit_rebuild(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            database = Path(temp) / "index.sqlite3"
+            import sqlite3
+
+            connection = sqlite3.connect(database)
+            connection.execute(
+                "CREATE TABLE catalog_entries(relative_path TEXT PRIMARY KEY, content TEXT NOT NULL)"
+            )
+            connection.execute("INSERT INTO catalog_entries VALUES('keep.txt', 'keep')")
+            connection.commit()
+            connection.close()
+
+            with self.assertRaisesRegex(CatalogError, "legacy|rebuild"):
+                with Catalog(database):
+                    pass
+
+            connection = sqlite3.connect(database)
+            preserved = connection.execute(
+                "SELECT content FROM catalog_entries WHERE relative_path='keep.txt'"
+            ).fetchone()[0]
+            connection.close()
+            self.assertEqual(preserved, "keep")
 
     def test_incremental_sync_updates_changed_removes_deleted_and_reuses_unchanged(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -174,31 +389,36 @@ class CatalogAndWikiTests(unittest.TestCase):
                 env={
                     "SAVE_YOUR_MEMORY_ROOT": str(root),
                     "SAVE_YOUR_MEMORY_HOME": str(home),
+                    "SAVE_YOUR_MEMORY_CHUNK_BYTES": "16",
                 },
                 env_file=None,
             )
 
-            with Catalog(home / "index.sqlite3") as catalog:
-                statements: list[str] = []
-                catalog.connection.set_trace_callback(statements.append)
+            with Catalog(home / "index.sqlite3", chunk_bytes=settings.chunk_bytes) as catalog:
                 catalog.sync(scan_tree(settings), settings.max_file_bytes)
-                first_sync_deletes = [
-                    statement
-                    for statement in statements
-                    if statement.upper().startswith("DELETE FROM CATALOG_SEARCH")
-                ]
+                first_chunks = catalog.connection.execute(
+                    "SELECT COUNT(*) FROM catalog_chunks"
+                ).fetchone()[0]
 
                 source.write_text("second searchable value is longer", encoding="utf-8")
-                statements.clear()
                 catalog.sync(scan_tree(settings), settings.max_file_bytes)
-                update_deletes = [
-                    statement
-                    for statement in statements
-                    if statement.upper().startswith("DELETE FROM CATALOG_SEARCH")
-                ]
+                update_chunks = catalog.connection.execute(
+                    "SELECT COUNT(*) FROM catalog_chunks"
+                ).fetchone()[0]
+                record = catalog.get("note.txt")
+                stale_hits = catalog.search("first searchable")
+                current_hits = catalog.search("second searchable")
 
-            self.assertEqual(first_sync_deletes, [])
-            self.assertEqual(len(update_deletes), 1)
+                source.unlink()
+                catalog.sync(scan_tree(settings), settings.max_file_bytes)
+                removed_hits = catalog.search("second searchable")
+
+            self.assertGreater(first_chunks, 1)
+            self.assertGreater(update_chunks, 1)
+            self.assertEqual(record.content, "second searchable value is longer")
+            self.assertEqual(stale_hits, ())
+            self.assertEqual([hit.relative_path for hit in current_hits], ["note.txt"])
+            self.assertEqual(removed_hits, ())
 
     def test_compile_streams_large_catalog_without_materializing_all_content(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -225,6 +445,38 @@ class CatalogAndWikiTests(unittest.TestCase):
                 tracemalloc.stop()
 
             self.assertLess(peak_bytes, 5 * 1024 * 1024)
+
+    def test_compile_does_not_read_chunks_for_unchanged_existing_pages(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            root = base / "source"
+            home = base / "memory"
+            root.mkdir()
+            (root / "stable.txt").write_text("stable evidence", encoding="utf-8")
+            settings = Settings.load(
+                env={
+                    "SAVE_YOUR_MEMORY_ROOT": str(root),
+                    "SAVE_YOUR_MEMORY_HOME": str(home),
+                },
+                env_file=None,
+            )
+
+            with Catalog(home / "index.sqlite3") as catalog:
+                first = catalog.sync(scan_tree(settings), settings.max_file_bytes)
+                compiler = WikiCompiler(settings, catalog)
+                compiler.compile(first)
+                second = catalog.sync(scan_tree(settings), settings.max_file_bytes)
+                statements: list[str] = []
+                catalog.connection.set_trace_callback(statements.append)
+                compiler.compile(second)
+
+            chunk_reads = [
+                statement
+                for statement in statements
+                if "SELECT CONTENT" in statement.upper()
+                and "FROM CATALOG_CHUNKS" in statement.upper()
+            ]
+            self.assertEqual(chunk_reads, [])
 
     def test_iter_records_uses_primary_key_order_without_global_nocase_sort(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

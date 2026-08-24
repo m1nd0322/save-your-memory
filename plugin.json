@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "save-your-memory",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Index a local Windows file tree into a persistent Markdown wiki and answer questions with source-linked evidence.",
   "author": {
     "name": "save-your-memory contributors"
