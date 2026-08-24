@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "save-your-memory"
+version = "0.1.0"
+description = "Compile an env-configured local file tree into a persistent Markdown wiki."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "save-your-memory contributors" }]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/m1nd0322/save-your-memory"
+Repository = "https://github.com/m1nd0322/save-your-memory"
+
+[project.scripts]
+save-your-memory = "save_your_memory.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["save_your_memory*"]

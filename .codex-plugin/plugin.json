@@ -1,0 +1,24 @@
+{
+  "name": "save-your-memory",
+  "version": "0.1.0",
+  "description": "Index an env-configured Windows file tree into a persistent Markdown wiki and answer questions with source-linked evidence.",
+  "author": {
+    "name": "save-your-memory contributors"
+  },
+  "homepage": "https://github.com/m1nd0322/save-your-memory",
+  "repository": "https://github.com/m1nd0322/save-your-memory",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Save Your Memory",
+    "shortDescription": "Turn local files into a searchable, source-linked wiki.",
+    "longDescription": "Recursively indexes a Windows directory from .env, extracts readable file content into a persistent Markdown wiki, and retrieves evidence so Codex can answer where information lives and what it says.",
+    "developerName": "save-your-memory contributors",
+    "category": "Productivity",
+    "capabilities": ["Local file indexing", "Knowledge retrieval", "Source citations"],
+    "defaultPrompt": [
+      "Index my configured memory folder.",
+      "Find this information in my memory wiki.",
+      "Check my memory wiki for inconsistencies."
+    ]
+  }
+}
