@@ -1,5 +1,9 @@
 # save-your-memory
 
+<p align="center">
+  <img src="docs/assets/openclaw-brain-overdrive.png" alt="두뇌를 풀가동하는 OpenClaw풍 가재 밈" width="960">
+</p>
+
 로컬 하드디스크에 흩어진 문서를 검색 가능한 Markdown 위키로 컴파일하고, GitHub Copilot 또는 Codex가 근거 링크와 함께 답변하도록 만드는 로컬 우선 지식 관리 플러그인입니다.
 
 - 원본 파일은 읽기 전용으로 유지
