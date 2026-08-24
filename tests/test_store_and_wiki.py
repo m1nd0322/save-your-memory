@@ -3,8 +3,10 @@ import tempfile
 import tracemalloc
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from save_your_memory.config import Settings
+from save_your_memory.extractors import ExtractionResult
 from save_your_memory.scanner import scan_tree
 from save_your_memory.store import Catalog, CatalogError
 from save_your_memory.wiki import WikiCompiler
@@ -111,6 +113,91 @@ class CatalogAndWikiTests(unittest.TestCase):
             self.assertIn("catalog_chunks", table_names)
             self.assertEqual([hit.relative_path for hit in hits], ["notes/chunked.md"])
             self.assertIn("evidence", hits[0].excerpt)
+
+    def test_unsupported_files_remain_searchable_by_relative_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            root = base / "source"
+            home = base / "memory"
+            root.mkdir()
+            (root / "route-map.bin").write_bytes(b"\x00\x01\x02\xff")
+            settings = Settings.load(
+                env={
+                    "SAVE_YOUR_MEMORY_ROOT": str(root),
+                    "SAVE_YOUR_MEMORY_HOME": str(home),
+                },
+                env_file=None,
+            )
+
+            with Catalog(home / "index.sqlite3") as catalog:
+                catalog.sync(scan_tree(settings), settings.max_file_bytes)
+                record = catalog.get("route-map.bin")
+                hits = catalog.search("route map")
+
+            self.assertEqual(record.status, "unsupported")
+            self.assertEqual([hit.relative_path for hit in hits], ["route-map.bin"])
+            self.assertIn("route-map.bin", hits[0].excerpt)
+
+    def test_error_files_remain_searchable_by_relative_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            root = base / "source"
+            home = base / "memory"
+            root.mkdir()
+            source = root / "legacy-route-map.ppt"
+            source.write_bytes(b"legacy ppt payload")
+            settings = Settings.load(
+                env={
+                    "SAVE_YOUR_MEMORY_ROOT": str(root),
+                    "SAVE_YOUR_MEMORY_HOME": str(home),
+                },
+                env_file=None,
+            )
+            failed = ExtractionResult("error", "", "", "PowerPoint unavailable", "")
+
+            with patch("save_your_memory.store.extract_content", return_value=failed):
+                with Catalog(home / "index.sqlite3") as catalog:
+                    catalog.sync(scan_tree(settings), settings.max_file_bytes)
+                    record = catalog.get("legacy-route-map.ppt")
+                    hits = catalog.search("legacy route map")
+
+            self.assertEqual(record.status, "error")
+            self.assertEqual(
+                [hit.relative_path for hit in hits],
+                ["legacy-route-map.ppt"],
+            )
+            self.assertIn("legacy-route-map.ppt", hits[0].excerpt)
+
+    def test_schema_v2_upgrade_backfills_path_only_chunks(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            database = Path(temp) / "index.sqlite3"
+            with Catalog(database) as catalog:
+                catalog.connection.execute(
+                    """
+                    INSERT INTO catalog_entries(
+                        relative_path, absolute_path, kind, size, mtime_ns, status,
+                        extractor, error, sha256, wiki_path, indexed_at
+                    ) VALUES (?, ?, 'file', 4, 1, 'unsupported', '', ?, '', '', ?)
+                    """,
+                    (
+                        "legacy-route-map.ppt",
+                        str(Path(temp) / "legacy-route-map.ppt"),
+                        "Unsupported file type: .ppt",
+                        "2026-08-24T00:00:00+00:00",
+                    ),
+                )
+                catalog.connection.execute("PRAGMA user_version = 2")
+                catalog.connection.commit()
+
+            with Catalog(database) as upgraded:
+                version = upgraded.connection.execute("PRAGMA user_version").fetchone()[0]
+                hits = upgraded.search("legacy route map")
+
+            self.assertEqual(version, 3)
+            self.assertEqual(
+                [hit.relative_path for hit in hits],
+                ["legacy-route-map.ppt"],
+            )
 
     def test_chunking_preserves_multibyte_text_below_one_codepoint_byte_width(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

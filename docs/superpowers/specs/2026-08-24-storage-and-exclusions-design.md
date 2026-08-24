@@ -19,6 +19,8 @@
 
 `catalog_search` is an FTS5 external-content table backed by `catalog_chunks`. It indexes `relative_path` and `content` but does not create a second FTS content shadow table. Insert, update, and delete triggers keep the FTS index synchronized with the chunk table. The relative path is included only on the first chunk so long files do not repeatedly index the same path.
 
+Files without readable content receive one path-only chunk with an empty body. This keeps unsupported, too-large, and extraction-error files discoverable by filename without claiming that their contents were understood.
+
 The schema uses integer rowids and foreign keys. Deleting or replacing an entry deletes its chunks first, which fires the external-content FTS delete trigger before metadata removal.
 
 ## Incremental data flow
@@ -33,10 +35,11 @@ The schema uses integer rowids and foreign keys. Deleting or replacing an entry 
 ## Compatibility and failure handling
 
 - The cleared generated data directory creates the new schema directly.
-- Opening a legacy database whose `catalog_entries` table still has a `content` column fails with an actionable rebuild message instead of silently mixing schemas.
+- Schema version 2 upgrades to version 3 by backfilling path-only chunks for files that have no searchable body. Older contentful schemas fail with an actionable rebuild message instead of being deleted.
 - Source files remain immutable.
 - Excluded files and directories receive no catalog record or wiki page.
-- Empty or unsupported files keep metadata but have no content chunks, matching the existing content-search behavior.
+- Empty or unsupported files keep metadata plus one path-only chunk; their unreadable body is never represented as extracted content.
+- Legacy `.ppt` files are copied to a temporary directory and converted to `.pptx` with an isolated LibreOffice profile or macro-disabled, read-only, hidden PowerPoint automation. The original file remains unchanged, and converter processes are supervised and terminated as a tree on timeout.
 
 ## Verification
 

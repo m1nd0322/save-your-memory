@@ -55,6 +55,7 @@ SAVE_YOUR_MEMORY_HOME              생성 데이터
 - 생성 위키가 원본 아래에 있어도 다시 인덱싱하지 않습니다.
 - 파일 변경이 없으면 내용을 다시 추출하지 않습니다.
 - `venv`, `site-packages`, `build`, `dist`, CSV 같은 캐시/배포성 파일은 기본 제외됩니다.
+- 본문을 읽을 수 없는 파일도 상대 경로 전용 청크를 만들어 파일명으로 검색할 수 있습니다.
 - 삭제된 원본은 플러그인이 관리하는 카탈로그와 위키 페이지만 정리합니다.
 
 ### 내용 추출
@@ -63,10 +64,14 @@ SAVE_YOUR_MEMORY_HOME              생성 데이터
 - Markdown, JSON, XML, HTML, 소스 코드와 설정 파일
 - 확장자가 없거나 생소해도 text sniffing을 통과한 파일
 - DOCX, PPTX, XLSX의 ZIP/XML 텍스트
+- 레거시 PPT는 LibreOffice `soffice --headless --convert-to pptx --outdir` 또는
+  Windows PowerPoint COM 자동화로 비대화형 변환한 뒤 추출합니다.
+  변환기가 없으면 파일명/경로 검색만 유지됩니다.
 - `pdftotext` 또는 선택적으로 설치된 PyMuPDF를 이용한 PDF 텍스트
 - 추출된 본문은 파일 전체가 아니라 SQLite external-content FTS5 청크로 저장합니다.
 
 바이너리·이미지·동영상·손상 문서처럼 의미 있는 텍스트를 추출할 수 없는 파일도 경로, 크기, 수정 시각, 추출 상태를 가진 위키 페이지로 남습니다.
+변환기 없는 레거시 `.ppt` 파일은 `error` 상태로 남지만, 파일명과 경로는 계속 검색할 수 있습니다.
 
 ### 저장 공간 최적화
 
@@ -94,6 +99,7 @@ SAVE_YOUR_MEMORY_HOME              생성 데이터
 - Python 3.11 이상
 - SQLite FTS5가 포함된 Python
 - 선택 사항: `pdftotext` 또는 PyMuPDF
+- 구형 `.ppt` 본문 추출 시 LibreOffice 또는 Microsoft PowerPoint
 - AI 답변 사용 시 GitHub Copilot 또는 Codex
 
 핵심 Python 런타임에는 필수 서드파티 패키지가 없습니다.
@@ -194,6 +200,7 @@ $save-your-memory 내 위키에서 원하는 자료를 찾아 요약해줘.
 python scripts/save_your_memory.py --env-file .env index --json
 
 # 이전 unsupported/error 항목 재시도
+# 새 문서 변환기를 설치한 뒤에도 이 명령으로 기존 항목을 다시 추출합니다.
 python scripts/save_your_memory.py --env-file .env index --retry-unreadable --json
 
 # 검색 근거 조회
@@ -234,6 +241,7 @@ docs/                               설계와 설치 문서
 - 이미지 기반 문서에는 별도 OCR extractor가 필요합니다.
 - 암호화되거나 손상된 PDF는 추출하지 못할 수 있습니다.
 - 바이너리·동영상·압축파일은 메타데이터만 저장될 수 있습니다.
+- 구형 `.ppt` 변환기가 없거나 변환에 실패해도 파일명·경로 검색은 유지되지만 본문은 검색할 수 없습니다.
 - 대규모 첫 ingest에는 충분한 디스크 공간과 시간이 필요합니다.
 - 데이터가 변경되면 `index`를 다시 실행해야 합니다.
 - 검색 성능은 청크 크기와 파일 수에 영향을 받습니다. 기본 청크 크기를 유지하고, 제외 규칙으로 빌드/가상환경/CSV 같은 잡음을 줄이는 것이 좋습니다.

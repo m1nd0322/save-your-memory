@@ -5,6 +5,7 @@ import io
 import os
 import re
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -12,6 +13,7 @@ import tempfile
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 from xml.etree import ElementTree
 
 
@@ -56,6 +58,7 @@ TEXT_EXTENSIONS = {
     ".yml",
 }
 TEXT_ENCODINGS = ("utf-8-sig", "utf-8", "cp949", "utf-16", "latin-1")
+PP_SAVE_AS_OPEN_XML_PRESENTATION = 24
 
 
 @dataclass(frozen=True)
@@ -243,6 +246,265 @@ def _read_pdf_output(path: Path, max_bytes: int) -> bytes:
     return output
 
 
+def _find_executable(*names: str) -> str | None:
+    for name in names:
+        executable = shutil.which(name)
+        if executable is not None:
+            return executable
+    return None
+
+
+def _program_files_roots() -> tuple[Path, ...]:
+    roots: list[Path] = []
+    for key in ("ProgramFiles", "ProgramFiles(x86)"):
+        value = os.environ.get(key, "").strip()
+        if value:
+            candidate = Path(value)
+            if candidate not in roots:
+                roots.append(candidate)
+    return tuple(roots)
+
+
+def _find_libreoffice() -> str | None:
+    executable = _find_executable("soffice", "soffice.com", "soffice.exe")
+    if executable is not None:
+        return executable
+    for root in _program_files_roots():
+        for name in ("soffice.com", "soffice.exe"):
+            candidate = root / "LibreOffice" / "program" / name
+            if candidate.is_file():
+                return str(candidate)
+    return None
+
+
+def _find_powerpoint() -> str | None:
+    executable = _find_executable("POWERPNT.EXE", "powerpnt.exe", "powerpnt")
+    if executable is not None:
+        return executable
+    for root in _program_files_roots():
+        for office_dir in ("Office16", "Office15", "Office14"):
+            candidate = root / "Microsoft Office" / "root" / office_dir / "POWERPNT.EXE"
+            if candidate.is_file():
+                return str(candidate)
+            legacy_candidate = root / "Microsoft Office" / office_dir / "POWERPNT.EXE"
+            if legacy_candidate.is_file():
+                return str(legacy_candidate)
+    return None
+
+
+def _terminate_process_tree(process: subprocess.Popen[str]) -> None:
+    if process.poll() is not None:
+        return
+    if os.name == "nt":
+        try:
+            completed = subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=10,
+            )
+            if completed.returncode != 0 and process.poll() is None:
+                process.kill()
+        except (OSError, subprocess.SubprocessError):
+            process.kill()
+        return
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except (OSError, ProcessLookupError):
+        process.kill()
+
+
+def _run_supervised(
+    command: list[str],
+    *,
+    timeout: int,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=env,
+        start_new_session=(os.name != "nt"),
+        creationflags=(
+            getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            if os.name == "nt"
+            else 0
+        ),
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        _terminate_process_tree(process)
+        try:
+            stdout, stderr = process.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            stdout, stderr = process.communicate()
+        raise subprocess.TimeoutExpired(
+            command,
+            timeout,
+            output=stdout if stdout is not None else exc.output,
+            stderr=stderr if stderr is not None else exc.stderr,
+        ) from exc
+    return subprocess.CompletedProcess(
+        command,
+        process.returncode,
+        stdout=stdout,
+        stderr=stderr,
+    )
+
+
+def _completed_detail(completed: subprocess.CompletedProcess[str]) -> str:
+    return ((completed.stderr or completed.stdout) or "").strip()
+
+
+def _convert_ppt_with_libreoffice(input_path: Path, output_dir: Path) -> Path:
+    executable = _find_libreoffice()
+    if executable is None:
+        raise FileNotFoundError("LibreOffice soffice was not found")
+    profile = output_dir / "libreoffice-profile"
+    profile.mkdir(exist_ok=True)
+    completed = _run_supervised(
+        [
+            executable,
+            f"-env:UserInstallation={profile.resolve().as_uri()}",
+            "--headless",
+            "--nologo",
+            "--nofirststartwizard",
+            "--convert-to",
+            "pptx",
+            "--outdir",
+            str(output_dir),
+            str(input_path),
+        ],
+        timeout=120,
+    )
+    if completed.returncode != 0:
+        detail = _completed_detail(completed)
+        raise RuntimeError(
+            f"LibreOffice conversion failed for {input_path.name}: {detail}"
+        )
+    converted = output_dir / f"{input_path.stem}.pptx"
+    if not converted.exists():
+        raise RuntimeError(
+            f"LibreOffice did not create the expected output file: {converted}"
+        )
+    return converted
+
+
+def _convert_ppt_with_powerpoint(input_path: Path, output_dir: Path) -> Path:
+    if os.name != "nt":
+        raise FileNotFoundError("PowerPoint COM automation is only available on Windows")
+    if _find_powerpoint() is None:
+        raise FileNotFoundError("Microsoft PowerPoint was not found")
+    powershell = _find_executable(
+        "powershell.exe", "powershell", "pwsh.exe", "pwsh"
+    )
+    if powershell is None:
+        raise FileNotFoundError("PowerShell was not found on PATH")
+    output_path = output_dir / f"{input_path.stem}.pptx"
+    script = "\n".join(
+        [
+            "$ErrorActionPreference = 'Stop'",
+            "$ppt = $null",
+            "$presentation = $null",
+            "$originalAutomationSecurity = $null",
+            "try {",
+            "  $ppt = New-Object -ComObject PowerPoint.Application",
+            "  $originalAutomationSecurity = $ppt.AutomationSecurity",
+            "  $ppt.AutomationSecurity = 3",
+            "  $ppt.DisplayAlerts = 1",
+            "  $presentation = $ppt.Presentations.Open($env:SAVE_YOUR_MEMORY_PPT_INPUT, -1, 0, 0)",
+            f"  $presentation.SaveCopyAs($env:SAVE_YOUR_MEMORY_PPT_OUTPUT, {PP_SAVE_AS_OPEN_XML_PRESENTATION}, 0)",
+            "} finally {",
+            "  if ($presentation -ne $null) {",
+            "    try { $presentation.Close() } catch {}",
+            "    try { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($presentation) } catch {}",
+            "  }",
+            "  if ($ppt -ne $null) {",
+            "    if ($originalAutomationSecurity -ne $null) {",
+            "      try { $ppt.AutomationSecurity = $originalAutomationSecurity } catch {}",
+            "    }",
+            "    try { $ppt.Quit() } catch {}",
+            "    try { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($ppt) } catch {}",
+            "  }",
+            "  [GC]::Collect()",
+            "  [GC]::WaitForPendingFinalizers()",
+            "}",
+        ]
+    )
+    process_env = dict(os.environ)
+    process_env.update(
+        {
+            "SAVE_YOUR_MEMORY_PPT_INPUT": str(input_path),
+            "SAVE_YOUR_MEMORY_PPT_OUTPUT": str(output_path),
+        }
+    )
+    completed = _run_supervised(
+        [
+            powershell,
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            script,
+        ],
+        env=process_env,
+        timeout=120,
+    )
+    if completed.returncode != 0:
+        detail = _completed_detail(completed)
+        raise RuntimeError(f"PowerPoint conversion failed for {input_path.name}: {detail}")
+    if not output_path.exists():
+        raise RuntimeError(
+            f"PowerPoint did not create the expected output file: {output_path}"
+        )
+    return output_path
+
+
+def _convert_legacy_ppt(input_path: Path, output_dir: Path) -> tuple[Path, str]:
+    attempts: list[tuple[str, Callable[[Path, Path], Path]]] = [
+        ("libreoffice", _convert_ppt_with_libreoffice)
+    ]
+    if os.name == "nt":
+        attempts.append(("powerpoint", _convert_ppt_with_powerpoint))
+
+    errors: list[str] = []
+    for label, converter in attempts:
+        try:
+            return converter(input_path, output_dir), label
+        except FileNotFoundError as exc:
+            errors.append(f"{label}: {exc}")
+        except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
+            errors.append(f"{label}: {exc}")
+    message = "; ".join(errors) if errors else "No supported .ppt converter was found"
+    raise RuntimeError(message)
+
+
+def _extract_ppt(raw: bytes, max_bytes: int) -> tuple[str, str]:
+    with tempfile.TemporaryDirectory() as temp:
+        temp_root = Path(temp)
+        input_path = temp_root / "input.ppt"
+        input_path.write_bytes(raw)
+        converted_path, converter = _convert_legacy_ppt(input_path, temp_root)
+        if converted_path.stat().st_size > max_bytes:
+            raise ExtractionTooLarge(
+                f"Converted PPTX exceeds configured limit of {max_bytes} bytes"
+            )
+        return (
+            _extract_pptx(converted_path.read_bytes(), max_bytes),
+            f"ppt:{converter}->pptx",
+        )
+
+
 def _extract_pdf(raw: bytes, max_bytes: int) -> tuple[str, str]:
     executable = shutil.which("pdftotext")
     with tempfile.TemporaryDirectory() as temp:
@@ -372,6 +634,9 @@ def extract_content(
         if suffix == ".pptx":
             content = _extract_pptx(raw, max_bytes)
             return ExtractionResult("extracted", content, "ooxml:pptx", "", digest)
+        if suffix == ".ppt":
+            content, extractor = _extract_ppt(raw, max_bytes)
+            return ExtractionResult("extracted", content, extractor, "", digest)
         if suffix == ".xlsx":
             content = _extract_xlsx(raw, max_bytes)
             return ExtractionResult("extracted", content, "ooxml:xlsx", "", digest)

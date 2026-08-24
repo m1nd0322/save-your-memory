@@ -58,7 +58,8 @@ class CatalogError(RuntimeError):
 
 
 class Catalog:
-    SCHEMA_VERSION = 2
+    SCHEMA_VERSION = 3
+    UPGRADABLE_SCHEMA_VERSIONS = frozenset({2})
     QUERY_STOPWORDS = frozenset(
         {
             "a",
@@ -131,12 +132,13 @@ class Catalog:
         entries_exist = self.connection.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='catalog_entries'"
         ).fetchone()
-        if entries_exist is not None and version != self.SCHEMA_VERSION:
+        supported_versions = self.UPGRADABLE_SCHEMA_VERSIONS | {self.SCHEMA_VERSION}
+        if entries_exist is not None and version not in supported_versions:
             raise CatalogError(
                 "A legacy save-your-memory catalog was found. Preserve or remove the "
-                "generated index.sqlite3, then rerun index to rebuild schema version 2."
+                "generated index.sqlite3, then rerun index to rebuild schema version 3."
             )
-        if version not in (0, self.SCHEMA_VERSION):
+        if version not in ({0} | supported_versions):
             raise CatalogError(
                 f"Unsupported catalog schema version {version}; rebuild index.sqlite3"
             )
@@ -212,6 +214,18 @@ class Catalog:
             END;
             """
         )
+        if version in self.UPGRADABLE_SCHEMA_VERSIONS:
+            self.connection.execute(
+                """
+                INSERT INTO catalog_chunks(entry_id, chunk_index, relative_path, content)
+                SELECT e.id, 0, e.relative_path, ''
+                FROM catalog_entries e
+                WHERE e.kind = 'file'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM catalog_chunks c WHERE c.entry_id = e.id
+                  )
+                """
+            )
         self.connection.execute(f"PRAGMA user_version = {self.SCHEMA_VERSION}")
         self.connection.commit()
 
@@ -298,7 +312,7 @@ class Catalog:
     def _write_chunks(self, entry_id: int, relative_path: str, content: str) -> None:
         chunks = self._chunk_content(content, self.chunk_bytes)
         if not chunks:
-            return
+            chunks = ("",)
         self.connection.executemany(
             """
             INSERT INTO catalog_chunks(entry_id, chunk_index, relative_path, content)
@@ -436,8 +450,9 @@ class Catalog:
                 raise CatalogError(f"Failed to fetch catalog row for {relative_path}")
             entry_id = int(entry_row["id"])
             self._delete_chunks(entry_id)
-            if extraction.status == "extracted":
-                self._write_chunks(entry_id, relative_path, extraction.content)
+            if entry.kind == "file":
+                content = extraction.content if extraction.status == "extracted" else ""
+                self._write_chunks(entry_id, relative_path, content)
             changed_paths.append(relative_path)
             if previous is None:
                 added += 1
@@ -619,7 +634,10 @@ class Catalog:
                                 absolute_path=row["absolute_path"],
                                 wiki_path=stable_wiki_path(row["relative_path"]),
                                 status=row["status"],
-                                excerpt=self._excerpt(row["content"], term_group),
+                                excerpt=(
+                                    self._excerpt(row["content"], term_group)
+                                    or row["relative_path"]
+                                ),
                                 score=float(-row["rank"]),
                             )
                             for row in rows
