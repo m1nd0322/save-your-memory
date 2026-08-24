@@ -227,6 +227,7 @@ scripts/save_your_memory.py        CLI 진입점
 save_your_memory/                  인덱서·추출기·검색·위키 엔진
 tests/                              unit/integration tests
 docs/                               설계와 설치 문서
+AGENTS.md                           AI 에이전트·기여자 작업 지침
 ```
 
 ## 개인정보와 정보보안
@@ -256,6 +257,8 @@ docs/                               설계와 설치 문서
 python -m unittest discover -s tests -v
 python -m compileall save_your_memory scripts tests
 ```
+
+테스트는 표준 라이브러리 `unittest`만 사용하며 별도 의존성 설치가 필요 없습니다. 이 저장소에서 작업하는 AI 에이전트와 기여자는 [AGENTS.md](AGENTS.md)의 명령어, 불변 조건, 스키마·매니페스트 동기화 규칙을 먼저 확인하세요.
 
 테스트는 다음을 포함합니다.
 
