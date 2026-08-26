@@ -1,6 +1,6 @@
 {
   "name": "save-your-memory",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Index an env-configured Windows file tree into a persistent Markdown wiki and answer questions with source-linked evidence.",
   "author": {
     "name": "save-your-memory contributors"
