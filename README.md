@@ -77,10 +77,22 @@ SAVE_YOUR_MEMORY_HOME              생성 데이터
 바이너리·이미지·동영상·손상 문서처럼 의미 있는 텍스트를 추출할 수 없는 파일도 경로, 크기, 수정 시각, 추출 상태를 가진 위키 페이지로 남습니다.
 변환기 없는 레거시 `.ppt` 파일은 `error` 상태로 남지만, 파일명과 경로는 계속 검색할 수 있습니다.
 
+### 한국어 검색
+
+- 한글 문서를 문자 bigram 인덱스로 보강해 붙여쓴 복합어도 찾을 수 있습니다.
+  예: 본문이 `온도보정알고리즘`인 문서를 `온도 보정 알고리즘`으로,
+  `온도 보정 알고리즘` 문서를 `온도보정알고리즘`으로 검색할 수 있습니다.
+- 파일명에 포함된 한국어도 동일하게 검색됩니다.
+- 검색어들이 한 파일에 동시 출현하지 않으면 BM25 순위 OR 폴백으로 근거를 반환하고,
+  그마저 없을 때만 빈 결과를 돌려줍니다.
+- `unsupported`/`error` 파일은 정상 파일보다 순위에서 뒤로 물러나되 계속 검색됩니다.
+
 ### 저장 공간 최적화
 
 - `catalog_entries`에는 파일 경로와 상태 같은 메타데이터만 저장합니다.
 - 추출 본문은 UTF-8 기준 기본 32 KiB의 토큰 안전 청크로 나눠 `catalog_chunks`에 한 번 저장합니다.
+- 한국어 검색을 위한 문자 bigram은 청크별 `ngrams` 컬럼에 함께 저장되며,
+  CJK 비중이 높은 자료일수록 FTS 인덱스 크기가 최대 약 2배까지 늘어날 수 있습니다.
 - `catalog_search`는 `catalog_chunks`를 참조하는 external-content FTS5 인덱스이므로 본문 사본을 위한 `catalog_search_content` 테이블을 만들지 않습니다.
 - 한 파일의 여러 청크가 검색되더라도 파일별 최상위 결과 하나로 묶습니다.
 - 검색어가 청크 경계 양쪽에 나뉘면 파일 단위 교집합 검색으로 보완합니다.
@@ -140,7 +152,7 @@ SAVE_YOUR_MEMORY_CHUNK_BYTES=32768
 
 기본 제외 규칙은 항상 유지되며 위 환경변수는 제외 대상을 추가합니다. CSV를 포함한 대용량 데이터 파일을 검색해야 한다면 필요한 형식만 선별적으로 허용하는 별도 설정 기능이 추가되기 전까지 원본 범위를 더 작은 폴더로 나누는 방식을 권장합니다.
 
-이 버전은 이전 파일 전체/contentful FTS5 DB와 스키마가 다릅니다. 이전 `index.sqlite3`가 남아 있다면 생성 데이터 폴더를 백업 또는 비운 다음 `index`를 다시 실행해야 합니다. 인덱서는 기존 DB를 자동 삭제하지 않습니다.
+이 버전은 스키마 버전 4를 사용합니다. 직전 버전(2, 3) 카탈로그는 다음 `index` 실행 시 ngrams 백필과 함께 자동 업그레이드되지만, 그 이전 카탈로그는 자동 삭제되지 않으므로 생성 데이터 폴더를 백업 또는 비운 다음 `index`를 다시 실행해야 합니다.
 
 ### 3. 최초 인덱싱
 
@@ -160,7 +172,15 @@ CLI `query`는 검색 근거를 JSON으로 반환합니다. GitHub Copilot 또�
 
 ## VS Code GitHub Copilot에서 설치
 
-이 저장소는 루트 [plugin.json](plugin.json)을 사용하는 Agent Plugins 1.0 패키지입니다.
+이 저장소는 루트 [plugin.json](plugin.json)을 사용하는 Agent Plugins 1.0 패키지입니다. 플러그인을 설치하면 최초 인덱싱부터 검색, 상태 확인까지 모든 기능을 Copilot Chat 대화로 실행할 수 있습니다.
+
+### 사전 준비
+
+- 최신 Visual Studio Code와 GitHub Copilot 확장(로그인 완료)
+- Python 3.11 이상(FTS5 포함 빌드)
+- 질문을 실행할 **workspace 폴더의 `.env`** — [빠른 시작](#2-환경-설정)과 같은 형식입니다. `.env`가 없으면 Copilot이 `SAVE_YOUR_MEMORY_ROOT` 경로를 물어보니 먼저 만들어 두세요.
+
+### 설치
 
 1. VS Code Command Palette에서 **Chat: Install Plugin From Source**를 실행합니다.
 2. 다음 URL을 입력합니다.
@@ -170,24 +190,40 @@ https://github.com/m1nd0322/save-your-memory
 ```
 
 3. 설치 source와 trust 정보를 확인합니다.
-4. **Chat: Open Customizations** → **Plugins**에서 활성화합니다.
-5. Copilot Chat의 Agent 모드에서 다음처럼 사용합니다.
+4. **Chat: Open Customizations** → **Plugins**에서 `save-your-memory`가 enabled인지 확인합니다. 보이지 않으면 **Developer: Reload Window**를 실행합니다.
+
+### Copilot Chat에서 실행
+
+1. Copilot Chat을 열고 Chat 모드를 **Agent**로 선택합니다.
+2. `/`를 입력해 `/save-your-memory:save-your-memory` 스킬을 선택하거나, 메시지 앞에 직접 입력합니다.
 
 ```text
 /save-your-memory:save-your-memory 내 위키에서 원하는 자료를 찾아 요약해줘.
 ```
 
-플러그인 제공 스킬은 `/<plugin-name>:<skill-name>` 형식으로 표시됩니다.
+플러그인 제공 스킬은 `/<plugin-name>:<skill-name>` 형식으로 표시되므로 이름이 두 번 반복되는 것이 정상입니다. 처음 실행할 때 Copilot이 플러그인에 포함된 Python CLI(`scripts/save_your_memory.py`) 실행 승인을 요청할 수 있습니다. 실행 대상을 확인한 뒤 승인하세요.
 
-Copilot Chat에서 `/`를 입력해 스킬을 선택하거나 다음처럼 직접 실행합니다.
+### 사용 가능한 기능 전체
 
-```text
-/save-your-memory:save-your-memory Data Builder 관련 자료를 찾아 원본 링크와 함께 요약해줘.
-```
+스킬은 내부적으로 이 저장소의 Python CLI(`index`, `query`, `status`, `lint`)를 실행합니다. 아래 표의 기능은 모두 Copilot Chat 메시지 하나로 실행됩니다.
 
-처음 실행할 때 Copilot이 플러그인에 포함된 Python CLI 실행 승인을 요청할 수 있습니다. 실행 대상이 이 저장소의 `scripts/save_your_memory.py`인지 확인한 뒤 승인하세요.
+| 기능 | 예시 요청 |
+| --- | --- |
+| 최초 인덱싱 | `내 위키를 처음 만들어줘` / `SAVE_YOUR_MEMORY_ROOT 폴더를 인덱싱해줘` |
+| 증분 재인덱싱 | `새로 추가된 파일만 반영해서 위키를 갱신해줘` |
+| 읽기 실패 파일 재시도 | `PDF 변환기를 설치했으니 읽지 못했던 파일을 다시 추출해줘` |
+| 검색 후 출처 링크 답변 | `온도 보정 관련 자료를 찾아 원본 경로와 함께 요약해줘` |
+| 원본 위치 탐색 | `TinyML 자료가 어느 원본 파일에 있는지 알려줘` |
+| 카탈로그 상태 확인 | `위키 인덱스 상태를 보여줘` (파일 수, 추출 오류 건수 등) |
+| 위키 일관성 검사 | `위키에서 누락된 페이지와 고아 페이지를 검사해줘` |
 
-자세한 내용은 [VS Code GitHub Copilot 설치 가이드](docs/vscode-copilot.md)를 참고하세요.
+동작 방식:
+
+- Copilot Agent는 플러그인에 포함된 [SKILL.md](skills/save-your-memory/SKILL.md) 지침에 따라 CLI를 실행하고, 결과 JSON의 `wiki_path`와 `source_path`를 근거로 답변합니다.
+- 환경 파일은 사용자가 지정한 경로 → 환경변수 `SAVE_YOUR_MEMORY_ENV_FILE` → 현재 workspace의 `.env` → 플러그인 설치 폴더의 `.env` 순서로 선택됩니다.
+- 검색 결과가 비어 있으면 한 번만 재인덱싱 후 다시 시도하며, 근거가 없으면 추측하지 않고 없다고 답변합니다.
+
+문제 해결과 로컬 개발 버전 등록 방법은 [VS Code GitHub Copilot 설치 가이드](docs/vscode-copilot.md)를 참고하세요.
 
 ## Codex에서 사용
 

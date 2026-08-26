@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from itertools import combinations
 from pathlib import Path
-from typing import Iterable, Iterator
+from typing import Iterable, Iterator, Sequence
 
 from .config import DEFAULT_CHUNK_BYTES
 from .extractors import ExtractionResult, extract_content
@@ -57,9 +57,34 @@ class CatalogError(RuntimeError):
     """Raised when the required local catalog capability is unavailable."""
 
 
+_CJK_RUN = re.compile(
+    r"[\u1100-\u11ff\u3130-\u318f\ua960-\ua97f\uac00-\ud7a3"
+    r"\u2e80-\u9fff\uf900-\ufaff]+"
+)
+
+
+def cjk_ngrams(text: str) -> str:
+    """Project CJK text into space-joined contiguous character bigrams."""
+    grams: list[str] = []
+    for run in _CJK_RUN.findall(text):
+        grams.extend(run[index : index + 2] for index in range(len(run) - 1))
+    return " ".join(grams)
+
+
+def _cjk_query_bigrams(token: str) -> tuple[str, ...]:
+    """Non-overlapping bigrams so spaced source text can satisfy glued queries."""
+    return tuple(
+        run[start : start + 2]
+        for run in _CJK_RUN.findall(token)
+        for start in range(0, len(run) - 1, 2)
+    )
+
+
 class Catalog:
-    SCHEMA_VERSION = 3
-    UPGRADABLE_SCHEMA_VERSIONS = frozenset({2})
+    SCHEMA_VERSION = 4
+    UPGRADABLE_SCHEMA_VERSIONS = frozenset({2, 3})
+    BM25_COLUMN_WEIGHTS = "8.0, 4.0, 2.0"
+    DEMOTED_STATUSES = ("unsupported", "error")
     QUERY_STOPWORDS = frozenset(
         {
             "a",
@@ -136,7 +161,8 @@ class Catalog:
         if entries_exist is not None and version not in supported_versions:
             raise CatalogError(
                 "A legacy save-your-memory catalog was found. Preserve or remove the "
-                "generated index.sqlite3, then rerun index to rebuild schema version 3."
+                f"generated index.sqlite3, then rerun index to rebuild schema "
+                f"version {self.SCHEMA_VERSION}."
             )
         if version not in ({0} | supported_versions):
             raise CatalogError(
@@ -167,10 +193,18 @@ class Catalog:
                 chunk_index INTEGER NOT NULL,
                 relative_path TEXT NOT NULL,
                 content TEXT NOT NULL,
+                ngrams TEXT NOT NULL DEFAULT '',
                 UNIQUE(entry_id, chunk_index)
             );
             """
         )
+        if entries_exist is not None and version != self.SCHEMA_VERSION:
+            self._migrate_legacy(version)
+        self._create_search_index()
+        self.connection.execute(f"PRAGMA user_version = {self.SCHEMA_VERSION}")
+        self.connection.commit()
+
+    def _create_search_index(self) -> None:
         try:
             self.connection.execute(
                 """
@@ -178,6 +212,7 @@ class Catalog:
                 USING fts5(
                     relative_path,
                     content,
+                    ngrams,
                     content='catalog_chunks',
                     content_rowid='id',
                     tokenize='unicode61'
@@ -193,41 +228,95 @@ class Catalog:
             CREATE TRIGGER IF NOT EXISTS catalog_chunks_ai
             AFTER INSERT ON catalog_chunks
             BEGIN
-                INSERT INTO catalog_search(rowid, relative_path, content)
-                VALUES (new.id, new.relative_path, new.content);
+                INSERT INTO catalog_search(rowid, relative_path, content, ngrams)
+                VALUES (new.id, new.relative_path, new.content, new.ngrams);
             END;
 
             CREATE TRIGGER IF NOT EXISTS catalog_chunks_ad
             AFTER DELETE ON catalog_chunks
             BEGIN
-                INSERT INTO catalog_search(catalog_search, rowid, relative_path, content)
-                VALUES('delete', old.id, old.relative_path, old.content);
+                INSERT INTO catalog_search(catalog_search, rowid, relative_path, content, ngrams)
+                VALUES('delete', old.id, old.relative_path, old.content, old.ngrams);
             END;
 
             CREATE TRIGGER IF NOT EXISTS catalog_chunks_au
             AFTER UPDATE ON catalog_chunks
             BEGIN
-                INSERT INTO catalog_search(catalog_search, rowid, relative_path, content)
-                VALUES('delete', old.id, old.relative_path, old.content);
-                INSERT INTO catalog_search(rowid, relative_path, content)
-                VALUES (new.id, new.relative_path, new.content);
+                INSERT INTO catalog_search(catalog_search, rowid, relative_path, content, ngrams)
+                VALUES('delete', old.id, old.relative_path, old.content, old.ngrams);
+                INSERT INTO catalog_search(rowid, relative_path, content, ngrams)
+                VALUES (new.id, new.relative_path, new.content, new.ngrams);
             END;
             """
         )
-        if version in self.UPGRADABLE_SCHEMA_VERSIONS:
+
+    def _migrate_legacy(self, version: int) -> None:
+        chunk_columns = {
+            row[1]
+            for row in self.connection.execute("PRAGMA table_info(catalog_chunks)")
+        }
+        if "ngrams" not in chunk_columns:
             self.connection.execute(
+                "ALTER TABLE catalog_chunks ADD COLUMN ngrams TEXT NOT NULL DEFAULT ''"
+            )
+        if version == 2:
+            missing = self.connection.execute(
                 """
-                INSERT INTO catalog_chunks(entry_id, chunk_index, relative_path, content)
-                SELECT e.id, 0, e.relative_path, ''
+                SELECT e.id, e.relative_path
                 FROM catalog_entries e
                 WHERE e.kind = 'file'
                   AND NOT EXISTS (
                       SELECT 1 FROM catalog_chunks c WHERE c.entry_id = e.id
                   )
                 """
+            ).fetchall()
+            self.connection.executemany(
+                """
+                INSERT INTO catalog_chunks(entry_id, chunk_index, relative_path, content, ngrams)
+                VALUES (?, 0, ?, '', ?)
+                """,
+                (
+                    (
+                        row["id"],
+                        row["relative_path"],
+                        cjk_ngrams(row["relative_path"]),
+                    )
+                    for row in missing
+                ),
             )
-        self.connection.execute(f"PRAGMA user_version = {self.SCHEMA_VERSION}")
-        self.connection.commit()
+        # Rebuild the FTS5 index so the ngrams column becomes searchable.
+        self.connection.executescript(
+            """
+            DROP TRIGGER IF EXISTS catalog_chunks_ai;
+            DROP TRIGGER IF EXISTS catalog_chunks_ad;
+            DROP TRIGGER IF EXISTS catalog_chunks_au;
+            DROP TABLE IF EXISTS catalog_search;
+            """
+        )
+        backfill = []
+        for row in self.connection.execute(
+            "SELECT id, chunk_index, relative_path, content FROM catalog_chunks"
+        ):
+            grams = " ".join(
+                part
+                for part in (
+                    cjk_ngrams(row["content"]),
+                    cjk_ngrams(row["relative_path"]) if row["chunk_index"] == 0 else "",
+                )
+                if part
+            )
+            backfill.append((grams, row["id"]))
+        self.connection.executemany(
+            "UPDATE catalog_chunks SET ngrams = ? WHERE id = ?",
+            backfill,
+        )
+        self._create_search_index()
+        self.connection.execute(
+            """
+            INSERT INTO catalog_search(rowid, relative_path, content, ngrams)
+            SELECT id, relative_path, content, ngrams FROM catalog_chunks
+            """
+        )
 
     @staticmethod
     def _record_from_row(row: sqlite3.Row, content: str = "") -> CatalogRecord:
@@ -313,13 +402,24 @@ class Catalog:
         chunks = self._chunk_content(content, self.chunk_bytes)
         if not chunks:
             chunks = ("",)
+        path_grams = cjk_ngrams(relative_path)
         self.connection.executemany(
             """
-            INSERT INTO catalog_chunks(entry_id, chunk_index, relative_path, content)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO catalog_chunks(entry_id, chunk_index, relative_path, content, ngrams)
+            VALUES (?, ?, ?, ?, ?)
             """,
             (
-                (entry_id, index, relative_path if index == 0 else "", chunk)
+                (
+                    entry_id,
+                    index,
+                    relative_path if index == 0 else "",
+                    chunk,
+                    " ".join(
+                        part
+                        for part in (cjk_ngrams(chunk), path_grams if index == 0 else "")
+                        if part
+                    ),
+                )
                 for index, chunk in enumerate(chunks)
             ),
         )
@@ -525,76 +625,85 @@ class Catalog:
             excerpt = f"{excerpt} …"
         return excerpt
 
+    def _demotion_clause(self) -> str:
+        statuses = ", ".join(f"'{status}'" for status in self.DEMOTED_STATUSES)
+        return f"CASE WHEN e.status IN ({statuses}) THEN 1 ELSE 0 END"
+
     def _search_same_chunk(
         self, match_query: str, limit: int
     ) -> list[sqlite3.Row]:
         return self.connection.execute(
-            """
-            WITH ranked_chunks AS (
-                SELECT c.entry_id, c.content,
-                       catalog_search.rank AS rank,
+            f"""
+            WITH matched AS (
+                SELECT rowid,
+                       bm25(catalog_search, {self.BM25_COLUMN_WEIGHTS}) AS rank
+                FROM catalog_search
+                WHERE catalog_search MATCH '{match_query}'
+            ),
+            ranked_chunks AS (
+                SELECT c.entry_id, c.content, matched.rank AS rank,
                        row_number() OVER (
                            PARTITION BY c.entry_id
-                           ORDER BY catalog_search.rank, c.chunk_index, c.id
+                           ORDER BY matched.rank, c.chunk_index, c.id
                        ) AS hit_order
-                FROM catalog_search
-                JOIN catalog_chunks c ON c.id = catalog_search.rowid
-                WHERE catalog_search MATCH ?
+                FROM matched
+                JOIN catalog_chunks c ON c.id = matched.rowid
             )
             SELECT e.relative_path, e.absolute_path, e.wiki_path, e.status,
                    ranked_chunks.content, ranked_chunks.rank
             FROM ranked_chunks
             JOIN catalog_entries e ON e.id = ranked_chunks.entry_id
             WHERE ranked_chunks.hit_order = 1
-            ORDER BY ranked_chunks.rank, e.relative_path COLLATE NOCASE
+            ORDER BY {self._demotion_clause()},
+                     ranked_chunks.rank, e.relative_path COLLATE NOCASE
             LIMIT ?
             """,
-            (match_query, limit),
+            (limit,),
         ).fetchall()
 
     def _search_across_chunks(
-        self, term_group: tuple[str, ...], limit: int
+        self, clauses: Sequence[str], limit: int
     ) -> list[sqlite3.Row]:
-        if len(term_group) < 2:
+        if len(clauses) < 2:
             return []
         ctes = [
-            """
+            f"""
             term_0_ranked AS (
                 SELECT c.entry_id, c.content,
-                       catalog_search.rank AS rank,
+                       catalog_search.rank AS chunk_rank,
                        row_number() OVER (
                            PARTITION BY c.entry_id
                            ORDER BY catalog_search.rank, c.chunk_index, c.id
                        ) AS hit_order
                 FROM catalog_search
                 JOIN catalog_chunks c ON c.id = catalog_search.rowid
-                WHERE catalog_search MATCH ?
+                WHERE catalog_search MATCH '{clauses[0]}'
             ),
             term_0 AS (
-                SELECT entry_id, content, rank
+                SELECT entry_id, content, chunk_rank AS rank
                 FROM term_0_ranked
                 WHERE hit_order = 1
             )
             """
         ]
-        for index in range(1, len(term_group)):
+        for index, clause in enumerate(clauses[1:], start=1):
             ctes.append(
                 f"""
                 term_{index} AS (
                     SELECT c.entry_id, min(catalog_search.rank) AS rank
                     FROM catalog_search
                     JOIN catalog_chunks c ON c.id = catalog_search.rowid
-                    WHERE catalog_search MATCH ?
+                    WHERE catalog_search MATCH '{clause}'
                     GROUP BY c.entry_id
                 )
                 """
             )
         joins = "\n".join(
             f"JOIN term_{index} ON term_{index}.entry_id = term_0.entry_id"
-            for index in range(1, len(term_group))
+            for index in range(1, len(clauses))
         )
         combined_rank = " + ".join(
-            f"term_{index}.rank" for index in range(len(term_group))
+            f"term_{index}.rank" for index in range(len(clauses))
         )
         sql = f"""
             WITH {','.join(ctes)}
@@ -603,11 +712,19 @@ class Catalog:
             FROM term_0
             {joins}
             JOIN catalog_entries e ON e.id = term_0.entry_id
-            ORDER BY rank, e.relative_path COLLATE NOCASE
+            ORDER BY {self._demotion_clause()},
+                     rank, e.relative_path COLLATE NOCASE
             LIMIT ?
         """
-        parameters = tuple(f'"{term}"' for term in term_group) + (limit,)
-        return self.connection.execute(sql, parameters).fetchall()
+        return self.connection.execute(sql, (limit,)).fetchall()
+
+    @staticmethod
+    def _match_clause(token: str) -> str:
+        grams = _cjk_query_bigrams(token)
+        if len(grams) < 2:
+            return f'"{token}"'
+        bigram_match = " AND ".join(f'ngrams: "{gram}"' for gram in grams)
+        return f'("{token}" OR {bigram_match})'
 
     def search(self, query: str, limit: int = 5) -> tuple[SearchHit, ...]:
         tokens = self._query_tokens(query)
@@ -615,31 +732,46 @@ class Catalog:
             return ()
         candidate_tokens = tokens[:4] + tokens[-4:] if len(tokens) > 8 else tokens
         minimum_terms = 1 if len(candidate_tokens) == 1 else 2
+        ladder_rows: list[sqlite3.Row] | None = None
+        matched_terms: tuple[str, ...] = candidate_tokens
         for term_count in range(len(candidate_tokens), minimum_terms - 1, -1):
             for term_group in combinations(candidate_tokens, term_count):
-                match_query = " AND ".join(f'"{token}"' for token in term_group)
+                clauses = [self._match_clause(token) for token in term_group]
+                match_query = " AND ".join(clauses)
                 rows = self._search_same_chunk(match_query, limit)
                 if len(rows) < limit:
                     seen_paths = {row["relative_path"] for row in rows}
                     rows.extend(
                         row
-                        for row in self._search_across_chunks(term_group, limit)
+                        for row in self._search_across_chunks(clauses, limit)
                         if row["relative_path"] not in seen_paths
                     )
                     rows = rows[:limit]
                 if rows:
-                    return tuple(
-                            SearchHit(
-                                relative_path=row["relative_path"],
-                                absolute_path=row["absolute_path"],
-                                wiki_path=stable_wiki_path(row["relative_path"]),
-                                status=row["status"],
-                                excerpt=(
-                                    self._excerpt(row["content"], term_group)
-                                    or row["relative_path"]
-                                ),
-                                score=float(-row["rank"]),
-                            )
-                            for row in rows
-                    )
-        return ()
+                    ladder_rows = rows[:limit]
+                    matched_terms = term_group
+                    break
+            if ladder_rows is not None:
+                break
+        rows = ladder_rows
+        if rows is None:
+            fallback_query = " OR ".join(
+                self._match_clause(token) for token in candidate_tokens
+            )
+            rows = self._search_same_chunk(fallback_query, limit)[:limit]
+        if not rows:
+            return ()
+        return tuple(
+                SearchHit(
+                    relative_path=row["relative_path"],
+                    absolute_path=row["absolute_path"],
+                    wiki_path=stable_wiki_path(row["relative_path"]),
+                    status=row["status"],
+                    excerpt=(
+                        self._excerpt(row["content"], matched_terms)
+                        or row["relative_path"]
+                    ),
+                    score=float(-row["rank"]),
+                )
+                for row in rows
+        )

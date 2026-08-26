@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import tempfile
 import tracemalloc
 import unittest
@@ -8,8 +9,421 @@ from unittest.mock import patch
 from save_your_memory.config import Settings
 from save_your_memory.extractors import ExtractionResult
 from save_your_memory.scanner import scan_tree
-from save_your_memory.store import Catalog, CatalogError
+from save_your_memory.store import Catalog, CatalogError, cjk_ngrams
 from save_your_memory.wiki import WikiCompiler
+
+
+class CjkNgramTests(unittest.TestCase):
+    def test_extracts_hangul_runs_into_contiguous_bigrams(self) -> None:
+        self.assertEqual(cjk_ngrams("온도보정"), "온도 도보 보정")
+        self.assertEqual(cjk_ngrams("온도보정알고리즘"), "온도 도보 보정 정알 알고 고리 리즘")
+
+    def test_single_two_character_word_produces_one_bigram(self) -> None:
+        self.assertEqual(cjk_ngrams("온도"), "온도")
+
+    def test_mixed_scripts_split_runs_at_boundaries(self) -> None:
+        self.assertEqual(cjk_ngrams("ABC온도 sensor 보정!"), "온도 보정")
+        self.assertEqual(cjk_ngrams("한글+English혼합"), "한글 혼합")
+
+    def test_non_cjk_text_produces_nothing(self) -> None:
+        self.assertEqual(cjk_ngrams("plain only 123"), "")
+        self.assertEqual(cjk_ngrams(""), "")
+
+
+class SchemaVersion4Tests(unittest.TestCase):
+    def test_fresh_schema_carries_ngram_columns_without_shadow_table(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            database = Path(temp) / "index.sqlite3"
+            with Catalog(database) as catalog:
+                chunk_columns = {
+                    row[1]
+                    for row in catalog.connection.execute(
+                        "PRAGMA table_info(catalog_chunks)"
+                    )
+                }
+                search_columns = {
+                    row[1]
+                    for row in catalog.connection.execute(
+                        "PRAGMA table_info(catalog_search)"
+                    )
+                }
+                tables = {
+                    row[0]
+                    for row in catalog.connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    )
+                }
+            self.assertIn("ngrams", chunk_columns)
+            self.assertIn("ngrams", search_columns)
+            self.assertNotIn("catalog_search_content", tables)
+
+    def test_ingested_korean_chunks_store_non_empty_ngrams(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            root = base / "source"
+            home = base / "memory"
+            root.mkdir(parents=True)
+            (root / "notes").mkdir()
+            (root / "notes" / "korean.md").write_text(
+                "본문에 온도보정 알고리즘이 포함된 문서입니다.", encoding="utf-8"
+            )
+            settings = Settings.load(
+                env={
+                    "SAVE_YOUR_MEMORY_ROOT": str(root),
+                    "SAVE_YOUR_MEMORY_HOME": str(home),
+                },
+                env_file=None,
+            )
+            with Catalog(home / "index.sqlite3") as catalog:
+                catalog.sync(scan_tree(settings), settings.max_file_bytes)
+                rows = catalog.connection.execute(
+                    """
+                    SELECT c.ngrams
+                    FROM catalog_chunks c
+                    JOIN catalog_entries e ON e.id = c.entry_id
+                    WHERE e.relative_path = 'notes/korean.md'
+                    ORDER BY c.chunk_index
+                    """
+                ).fetchall()
+            ngram_text = " ".join(row["ngrams"] for row in rows if row["ngrams"])
+            self.assertIn("온도", ngram_text)
+            self.assertIn("도보", ngram_text)
+            self.assertIn("보정", ngram_text)
+
+
+class SchemaMigrationTests(unittest.TestCase):
+    @staticmethod
+    def _create_v3_database(database: Path) -> None:
+        connection = sqlite3.connect(database)
+        try:
+            connection.executescript(
+                """
+                CREATE TABLE catalog_entries (
+                    id INTEGER PRIMARY KEY,
+                    relative_path TEXT NOT NULL UNIQUE,
+                    absolute_path TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    size INTEGER NOT NULL,
+                    mtime_ns INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    extractor TEXT NOT NULL,
+                    error TEXT NOT NULL,
+                    sha256 TEXT NOT NULL,
+                    wiki_path TEXT NOT NULL DEFAULT '',
+                    indexed_at TEXT NOT NULL
+                );
+                CREATE TABLE catalog_chunks (
+                    id INTEGER PRIMARY KEY,
+                    entry_id INTEGER NOT NULL REFERENCES catalog_entries(id) ON DELETE CASCADE,
+                    chunk_index INTEGER NOT NULL,
+                    relative_path TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    UNIQUE(entry_id, chunk_index)
+                );
+                CREATE VIRTUAL TABLE catalog_search USING fts5(
+                    relative_path,
+                    content,
+                    content='catalog_chunks',
+                    content_rowid='id',
+                    tokenize='unicode61'
+                );
+                CREATE TRIGGER catalog_chunks_ai
+                AFTER INSERT ON catalog_chunks
+                BEGIN
+                    INSERT INTO catalog_search(rowid, relative_path, content)
+                    VALUES (new.id, new.relative_path, new.content);
+                END;
+                CREATE TRIGGER catalog_chunks_ad
+                AFTER DELETE ON catalog_chunks
+                BEGIN
+                    INSERT INTO catalog_search(catalog_search, rowid, relative_path, content)
+                    VALUES('delete', old.id, old.relative_path, old.content);
+                END;
+                CREATE TRIGGER catalog_chunks_au
+                AFTER UPDATE ON catalog_chunks
+                BEGIN
+                    INSERT INTO catalog_search(catalog_search, rowid, relative_path, content)
+                    VALUES('delete', old.id, old.relative_path, old.content);
+                    INSERT INTO catalog_search(rowid, relative_path, content)
+                    VALUES (new.id, new.relative_path, new.content);
+                END;
+                """
+            )
+            connection.execute(
+                """
+                INSERT INTO catalog_entries(
+                    relative_path, absolute_path, kind, size, mtime_ns, status,
+                    extractor, error, sha256, wiki_path, indexed_at
+                ) VALUES (?, ?, 'file', 64, 1, 'extracted', '', '', ?, '', ?)
+                """,
+                (
+                    "notes/korean.md",
+                    "/docs/notes/korean.md",
+                    "0" * 64,
+                    "2026-08-24T00:00:00+00:00",
+                ),
+            )
+            entry_id = connection.execute(
+                "SELECT id FROM catalog_entries WHERE relative_path = 'notes/korean.md'"
+            ).fetchone()[0]
+            connection.execute(
+                """
+                INSERT INTO catalog_chunks(entry_id, chunk_index, relative_path, content)
+                VALUES (?, 0, 'notes/korean.md', ?)
+                """,
+                (entry_id, "본문에 온도보정 알고리즘이 포함된 문서입니다."),
+            )
+            connection.execute("PRAGMA user_version = 3")
+            connection.commit()
+        finally:
+            connection.close()
+
+    def test_v3_catalog_upgrades_in_place_and_backfills_ngrams(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            database = Path(temp) / "index.sqlite3"
+            self._create_v3_database(database)
+
+            with Catalog(database) as catalog:
+                version = catalog.connection.execute(
+                    "PRAGMA user_version"
+                ).fetchone()[0]
+                hits = catalog.search("온도", limit=5)
+                record = catalog.get("notes/korean.md")
+                tables = {
+                    row[0]
+                    for row in catalog.connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    )
+                }
+
+            self.assertEqual(version, Catalog.SCHEMA_VERSION)
+            self.assertEqual([hit.relative_path for hit in hits], ["notes/korean.md"])
+            self.assertEqual(
+                record.content, "본문에 온도보정 알고리즘이 포함된 문서입니다."
+            )
+            self.assertNotIn("catalog_search_content", tables)
+
+    def test_v2_catalog_chains_into_v4_and_backfills_korean_path_ngrams(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            database = Path(temp) / "index.sqlite3"
+            with Catalog(database) as legacy:
+                legacy.connection.execute(
+                    """
+                    INSERT INTO catalog_entries(
+                        relative_path, absolute_path, kind, size, mtime_ns, status,
+                        extractor, error, sha256, wiki_path, indexed_at
+                    ) VALUES (?, ?, 'file', 4, 1, 'unsupported', '', ?, '', '', ?)
+                    """,
+                    (
+                        "폴더/온도센서점검.ppt",
+                        str(Path(temp) / "온도센서점검.ppt"),
+                        "Unsupported file type: .ppt",
+                        "2026-08-24T00:00:00+00:00",
+                    ),
+                )
+                # Simulate the pre-upgrade v2 layout: no path-only chunk yet.
+                legacy.connection.execute("DELETE FROM catalog_chunks")
+                legacy.connection.execute("PRAGMA user_version = 2")
+                legacy.connection.commit()
+
+            with Catalog(database) as upgraded:
+                version = upgraded.connection.execute(
+                    "PRAGMA user_version"
+                ).fetchone()[0]
+                hits = upgraded.search("온도", limit=5)
+
+            self.assertEqual(version, Catalog.SCHEMA_VERSION)
+            self.assertEqual([hit.relative_path for hit in hits], ["폴더/온도센서점검.ppt"])
+
+
+class KoreanQueryExpansionTests(unittest.TestCase):
+    def _catalog_with_document(self, temp: str, filename: str, body: str):
+        base = Path(temp)
+        root = base / "source"
+        home = base / "memory"
+        (root / "notes").mkdir(parents=True)
+        (root / "notes" / filename).write_text(body, encoding="utf-8")
+        settings = Settings.load(
+            env={
+                "SAVE_YOUR_MEMORY_ROOT": str(root),
+                "SAVE_YOUR_MEMORY_HOME": str(home),
+            },
+            env_file=None,
+        )
+        catalog = Catalog(home / "index.sqlite3")
+        catalog.sync(scan_tree(settings), settings.max_file_bytes)
+        return catalog
+
+    def test_spaced_query_terms_find_glued_compound_document(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            catalog = self._catalog_with_document(
+                temp, "temperature.md", "본문에 온도보정알고리즘이 포함된 문서입니다."
+            )
+            try:
+                hits = catalog.search("온도 보정 알고리즘", limit=5)
+                paths = [hit.relative_path for hit in hits]
+            finally:
+                catalog.close()
+            self.assertEqual(paths, ["notes/temperature.md"])
+
+    def test_glued_query_finds_spaced_compound_document(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            catalog = self._catalog_with_document(
+                temp, "procedure.md", "이 문서는 온도 보정 알고리즘 절차를 담습니다."
+            )
+            try:
+                hits = catalog.search("온도보정알고리즘", limit=5)
+                paths = [hit.relative_path for hit in hits]
+            finally:
+                catalog.close()
+            self.assertEqual(paths, ["notes/procedure.md"])
+
+    def test_absent_cjk_term_still_yields_no_results(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            catalog = self._catalog_with_document(
+                temp, "unrelated.md", "완전히 다른 주제의 문서입니다. 펌프 캘리브레이션."
+            )
+            try:
+                hits = catalog.search("온도보정알고리즘", limit=5)
+            finally:
+                catalog.close()
+            self.assertEqual(hits, ())
+
+
+class OrFallbackTests(unittest.TestCase):
+    def _catalog_with_documents(self, temp: str, documents: dict[str, str]):
+        base = Path(temp)
+        root = base / "source"
+        home = base / "memory"
+        for filename, body in documents.items():
+            target = root / filename
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(body, encoding="utf-8")
+        settings = Settings.load(
+            env={
+                "SAVE_YOUR_MEMORY_ROOT": str(root),
+                "SAVE_YOUR_MEMORY_HOME": str(home),
+            },
+            env_file=None,
+        )
+        catalog = Catalog(home / "index.sqlite3")
+        catalog.sync(scan_tree(settings), settings.max_file_bytes)
+        return catalog
+
+    def test_terms_that_never_cooccur_still_return_ranked_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            catalog = self._catalog_with_documents(
+                temp,
+                {
+                    "a/alpha.md": "온도 센서 교체 절차만 정리된 문서입니다.",
+                    "b/beta.md": "펌프 캘리브레이션 기록만 남은 문서입니다.",
+                },
+            )
+            try:
+                hits = catalog.search("온도 펌프", limit=5)
+                paths = {hit.relative_path for hit in hits}
+            finally:
+                catalog.close()
+            self.assertEqual(paths, {"a/alpha.md", "b/beta.md"})
+
+    def test_and_matches_outrank_or_fallback_files_when_both_exist(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            catalog = self._catalog_with_documents(
+                temp,
+                {
+                    "c/both.md": "온도 펌프 두 주제를 함께 다루는 문서입니다.",
+                    "a/alpha.md": "온도 센서 교체 절차만 정리된 문서입니다.",
+                    "b/beta.md": "펌프 캘리브레이션 기록만 남은 문서입니다.",
+                },
+            )
+            try:
+                hits = catalog.search("온도 펌프", limit=5)
+                paths = [hit.relative_path for hit in hits]
+            finally:
+                catalog.close()
+            self.assertEqual(paths, ["c/both.md"])
+
+
+class RankingOrderTests(unittest.TestCase):
+    def _sync_catalog(self, temp: str):
+        base = Path(temp)
+        root = base / "source"
+        home = base / "memory"
+        settings = Settings.load(
+            env={
+                "SAVE_YOUR_MEMORY_ROOT": str(root),
+                "SAVE_YOUR_MEMORY_HOME": str(home),
+            },
+            env_file=None,
+        )
+        catalog = Catalog(home / "index.sqlite3")
+        catalog.sync(scan_tree(settings), settings.max_file_bytes)
+        return catalog
+
+    def test_filename_match_outranks_body_only_match(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp) / "source"
+            (base / "docs").mkdir(parents=True)
+            (base / "misc").mkdir(parents=True)
+            # Filename carries the term; body does not.
+            (base / "docs" / "온도센서점검.txt").write_text(
+                "일상 업무 기록입니다.", encoding="utf-8"
+            )
+            # Body carries the term; filename does not.
+            (base / "misc" / "note.txt").write_text(
+                "이번 주 온도센서점검 일정을 공유합니다.", encoding="utf-8"
+            )
+            catalog = self._sync_catalog(temp)
+            try:
+                hits = catalog.search("온도센서점검", limit=5)
+                paths = [hit.relative_path for hit in hits]
+            finally:
+                catalog.close()
+            self.assertEqual(
+                paths, ["docs/온도센서점검.txt", "misc/note.txt"]
+            )
+
+    def test_broken_files_rank_below_contentful_files_at_equal_terms(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp) / "source"
+            base.mkdir(parents=True)
+            (base / "fresh-report.txt").write_text(
+                "보고서 초안 내용을 담고 있습니다.", encoding="utf-8"
+            )
+            broken = base / "legacy-보고서.ppt"
+            broken.write_bytes(b"legacy ppt payload")
+            from save_your_memory.extractors import ExtractionResult as _ER
+            from save_your_memory import store as _store
+
+            failed = _ER("error", "", "", "PowerPoint unavailable", "")
+            original_extract = _store.extract_content
+
+            def selective_extract(path, *args, **kwargs):
+                if str(path).endswith(".ppt"):
+                    return failed
+                return original_extract(path, *args, **kwargs)
+
+            settings = Settings.load(
+                env={
+                    "SAVE_YOUR_MEMORY_ROOT": str(base.parent / "source"),
+                    "SAVE_YOUR_MEMORY_HOME": str(base.parent / "memory"),
+                },
+                env_file=None,
+            )
+            with patch(
+                "save_your_memory.store.extract_content",
+                side_effect=selective_extract,
+            ):
+                catalog = Catalog(base.parent / "memory" / "index.sqlite3")
+                catalog.sync(scan_tree(settings), settings.max_file_bytes)
+                try:
+                    hits = catalog.search("보고서", limit=5)
+                    paths = [hit.relative_path for hit in hits]
+                    statuses = [hit.status for hit in hits]
+                finally:
+                    catalog.close()
+            self.assertEqual(paths[0], "fresh-report.txt")
+            self.assertEqual(statuses[-1], "error")
 
 
 class CatalogAndWikiTests(unittest.TestCase):
@@ -193,7 +607,7 @@ class CatalogAndWikiTests(unittest.TestCase):
                 version = upgraded.connection.execute("PRAGMA user_version").fetchone()[0]
                 hits = upgraded.search("legacy route map")
 
-            self.assertEqual(version, 3)
+            self.assertEqual(version, Catalog.SCHEMA_VERSION)
             self.assertEqual(
                 [hit.relative_path for hit in hits],
                 ["legacy-route-map.ppt"],
@@ -493,7 +907,7 @@ class CatalogAndWikiTests(unittest.TestCase):
                     "SELECT COUNT(*) FROM catalog_chunks"
                 ).fetchone()[0]
                 record = catalog.get("note.txt")
-                stale_hits = catalog.search("first searchable")
+                stale_hits = catalog.search("first")
                 current_hits = catalog.search("second searchable")
 
                 source.unlink()
