@@ -1,0 +1,1109 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="자동보정선행개발팀을 위한 save-your-memory 5W 발표 자료">
+  <title>save-your-memory | 자동보정선행개발팀</title>
+  <style>
+    :root {
+      --bg: #080d15;
+      --panel: #101925;
+      --panel-2: #152334;
+      --ink: #f1f6fb;
+      --muted: #9aaabd;
+      --line: rgba(185, 211, 234, .16);
+      --orange: #ff7659;
+      --orange-soft: #ffb39d;
+      --cyan: #6ee7f5;
+      --lime: #d7f49a;
+      --blue: #8fb7ff;
+      --danger: #ff9c82;
+      --shadow: 0 22px 70px rgba(0, 0, 0, .36);
+    }
+
+    * { box-sizing: border-box; }
+
+    html { background: var(--bg); }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% 10%, rgba(255, 118, 89, .13), transparent 30rem),
+        radial-gradient(circle at 88% 88%, rgba(110, 231, 245, .08), transparent 34rem),
+        var(--bg);
+      font-family: Inter, "Segoe UI", "Malgun Gothic", sans-serif;
+      line-height: 1.45;
+    }
+
+    button { font: inherit; }
+
+    .deck {
+      display: grid;
+      place-items: center;
+      min-height: 100vh;
+      padding: 30px 24px 86px;
+    }
+
+    .slide {
+      position: relative;
+      display: none;
+      width: min(1240px, 100%);
+      max-height: 780px;
+      min-height: min(680px, calc(100vh - 142px));
+      aspect-ratio: 16 / 9;
+      overflow: hidden;
+      padding: clamp(30px, 4.2vw, 68px);
+      border: 1px solid var(--line);
+      border-radius: 26px;
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, .045), transparent 42%),
+        linear-gradient(145deg, rgba(17, 30, 47, .98), rgba(8, 14, 23, .98));
+      box-shadow: var(--shadow);
+      isolation: isolate;
+    }
+
+    .slide::before {
+      position: absolute;
+      z-index: -1;
+      inset: 0;
+      background-image: linear-gradient(rgba(255, 255, 255, .025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, .025) 1px, transparent 1px);
+      background-size: 42px 42px;
+      content: "";
+      mask-image: linear-gradient(to bottom right, black, transparent 72%);
+    }
+
+    .slide.active { display: grid; }
+
+    .slide.cover {
+      grid-template-columns: 1.04fr .96fr;
+      align-items: center;
+      gap: 42px;
+      padding: 0;
+      background: #090d14;
+    }
+
+    .slide.cover::after {
+      position: absolute;
+      z-index: -1;
+      inset: 0;
+      background: linear-gradient(90deg, rgba(8, 13, 21, .98) 0%, rgba(8, 13, 21, .86) 46%, rgba(8, 13, 21, .08) 100%);
+      content: "";
+    }
+
+    .cover-copy { padding: clamp(30px, 6vw, 86px); }
+
+    .cover-image {
+      position: absolute;
+      z-index: -2;
+      inset: 0 0 0 42%;
+      overflow: hidden;
+    }
+
+    .cover-image img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: 52% center;
+      filter: saturate(1.12) contrast(1.04);
+    }
+
+    .cover-image::after {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, #090d14 0%, rgba(9, 13, 20, .58) 21%, transparent 66%), linear-gradient(0deg, rgba(9, 13, 20, .58), transparent 46%);
+      content: "";
+    }
+
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 18px;
+      color: var(--orange-soft);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      display: inline-block;
+      width: 30px;
+      height: 2px;
+      background: var(--orange);
+      content: "";
+    }
+
+    h1, h2, h3, p { margin-top: 0; }
+
+    h1 {
+      max-width: 660px;
+      margin-bottom: 20px;
+      font-size: clamp(38px, 5.7vw, 82px);
+      line-height: .98;
+      letter-spacing: -.065em;
+    }
+
+    h2 {
+      max-width: 770px;
+      margin-bottom: 14px;
+      font-size: clamp(28px, 4vw, 53px);
+      line-height: 1.05;
+      letter-spacing: -.05em;
+    }
+
+    h3 {
+      margin-bottom: 8px;
+      font-size: clamp(17px, 1.7vw, 23px);
+      letter-spacing: -.025em;
+    }
+
+    .lead {
+      max-width: 650px;
+      color: #d8e3ed;
+      font-size: clamp(16px, 1.65vw, 22px);
+      line-height: 1.55;
+    }
+
+    .cover .lead { max-width: 560px; }
+
+    .subtle { color: var(--muted); }
+
+    .slide-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 24px;
+    }
+
+    .slide-head p { max-width: 600px; margin-bottom: 0; color: var(--muted); font-size: 15px; }
+
+    .slide-number {
+      flex: 0 0 auto;
+      padding-top: 4px;
+      color: var(--orange);
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: 12px;
+      letter-spacing: .12em;
+    }
+
+    .grid-5 {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      margin-top: 24px;
+    }
+
+    .w-card, .card {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(18, 31, 47, .74);
+    }
+
+    .w-card {
+      min-height: 175px;
+      padding: 18px 16px;
+    }
+
+    .w-card strong {
+      display: block;
+      margin-bottom: 13px;
+      color: var(--orange-soft);
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: 15px;
+      letter-spacing: .12em;
+    }
+
+    .w-card p { margin-bottom: 0; color: #d4e0eb; font-size: 14px; line-height: 1.55; }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 1.03fr) minmax(310px, .97fr);
+      align-items: center;
+      gap: clamp(28px, 5vw, 74px);
+      min-height: 0;
+    }
+
+    .split.top { align-items: start; }
+
+    .stack {
+      display: grid;
+      gap: 12px;
+    }
+
+    .card { padding: 19px 20px; }
+
+    .card p:last-child, .card ul:last-child { margin-bottom: 0; }
+
+    .card p { color: #c8d6e4; font-size: 14px; }
+
+    .card.accent { border-color: rgba(255, 118, 89, .4); background: linear-gradient(145deg, rgba(255, 118, 89, .13), rgba(18, 31, 47, .72)); }
+    .card.cyan { border-color: rgba(110, 231, 245, .32); background: linear-gradient(145deg, rgba(110, 231, 245, .08), rgba(18, 31, 47, .72)); }
+    .card.lime { border-color: rgba(215, 244, 154, .3); background: linear-gradient(145deg, rgba(215, 244, 154, .07), rgba(18, 31, 47, .72)); }
+
+    .tag-row, .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .tag, .meta {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 4px 9px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: 11px;
+    }
+
+    .tag.hot { border-color: rgba(255, 118, 89, .46); color: var(--orange-soft); }
+    .tag.cool { border-color: rgba(110, 231, 245, .42); color: var(--cyan); }
+    .tag.good { border-color: rgba(215, 244, 154, .4); color: var(--lime); }
+
+    ul.clean {
+      display: grid;
+      gap: 11px;
+      padding: 0;
+      margin: 0;
+      list-style: none;
+    }
+
+    ul.clean li {
+      position: relative;
+      padding-left: 19px;
+      color: #d4e0eb;
+      font-size: 15px;
+    }
+
+    ul.clean li::before {
+      position: absolute;
+      top: .65em;
+      left: 0;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--orange);
+      box-shadow: 0 0 12px rgba(255, 118, 89, .7);
+      content: "";
+    }
+
+    .visual {
+      position: relative;
+      display: grid;
+      place-items: center;
+      min-height: 280px;
+      border: 1px solid var(--line);
+      border-radius: 21px;
+      background: rgba(7, 15, 25, .42);
+      overflow: hidden;
+    }
+
+    .visual::before {
+      position: absolute;
+      width: 240px;
+      height: 240px;
+      border: 1px solid rgba(110, 231, 245, .15);
+      border-radius: 50%;
+      box-shadow: 0 0 0 26px rgba(110, 231, 245, .025), 0 0 0 52px rgba(110, 231, 245, .018);
+      content: "";
+    }
+
+    .visual svg { position: relative; z-index: 1; width: 90%; max-width: 470px; height: auto; }
+
+    .visual-label {
+      position: absolute;
+      right: 14px;
+      bottom: 12px;
+      color: #617388;
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: 10px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .metric-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .metric { padding: 15px; border-top: 2px solid var(--orange); background: rgba(255, 255, 255, .035); }
+    .metric strong { display: block; margin-bottom: 5px; color: var(--ink); font-size: 21px; letter-spacing: -.04em; }
+    .metric span { color: var(--muted); font-size: 12px; }
+
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 32px 1fr;
+      align-items: stretch;
+      gap: 15px;
+      margin-top: 18px;
+    }
+
+    .compare-panel { padding: 19px; border: 1px solid var(--line); border-radius: 17px; background: rgba(18, 31, 47, .7); }
+    .compare-panel.before { border-color: rgba(255, 156, 130, .28); }
+    .compare-panel.after { border-color: rgba(215, 244, 154, .34); background: rgba(24, 43, 43, .52); }
+    .compare-panel h3 { margin-bottom: 14px; }
+    .compare-panel.before h3 { color: var(--danger); }
+    .compare-panel.after h3 { color: var(--lime); }
+    .compare-arrow { display: grid; place-items: center; color: var(--orange); font-size: 24px; }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0;
+      margin-top: 20px;
+    }
+
+    .flow-step { position: relative; min-height: 166px; padding: 18px 18px 15px; border: 1px solid var(--line); border-right: 0; background: rgba(18, 31, 47, .72); }
+    .flow-step:first-child { border-radius: 16px 0 0 16px; }
+    .flow-step:last-child { border-right: 1px solid var(--line); border-radius: 0 16px 16px 0; }
+    .flow-step:not(:last-child)::after { position: absolute; top: 50%; right: -8px; z-index: 2; width: 15px; height: 15px; border-top: 1px solid var(--orange); border-right: 1px solid var(--orange); background: var(--panel-2); transform: translateY(-50%) rotate(45deg); content: ""; }
+    .step-no { display: block; margin-bottom: 14px; color: var(--orange); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+    .flow-step strong { display: block; margin-bottom: 8px; font-size: 16px; }
+    .flow-step p { margin-bottom: 0; color: var(--muted); font-size: 13px; }
+
+    .timeline { display: grid; gap: 0; margin-top: 18px; }
+    .time-row { display: grid; grid-template-columns: 92px 1fr 1.1fr; align-items: center; gap: 18px; min-height: 73px; border-bottom: 1px solid var(--line); }
+    .time-row:last-child { border-bottom: 0; }
+    .time-mark { color: var(--orange-soft); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+    .time-row strong { font-size: 15px; }
+    .time-row span { color: var(--muted); font-size: 13px; }
+
+    .prompt-list { display: grid; gap: 10px; margin-top: 18px; }
+    .prompt {
+      display: grid;
+      grid-template-columns: 116px 1fr;
+      gap: 15px;
+      align-items: center;
+      padding: 13px 15px;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: rgba(18, 31, 47, .7);
+    }
+    .prompt-label { color: var(--cyan); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; letter-spacing: .04em; }
+    .prompt code { color: #e1ecf4; font-size: 13px; }
+
+    .terminal {
+      width: min(100%, 560px);
+      border: 1px solid rgba(110, 231, 245, .3);
+      border-radius: 17px;
+      background: #071018;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, .28);
+      overflow: hidden;
+    }
+    .terminal-bar { display: flex; gap: 6px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+    .terminal-bar i { width: 8px; height: 8px; border-radius: 50%; background: var(--orange); }
+    .terminal-bar i:nth-child(2) { background: #f4c95d; }
+    .terminal-bar i:nth-child(3) { background: var(--lime); }
+    pre { margin: 0; padding: 20px; overflow-x: auto; color: #c9f4e2; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; line-height: 1.8; }
+    .cmd { color: var(--cyan); }
+    .comment { color: #667b90; }
+
+    .guard-grid, .decision-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 18px; }
+    .guard { display: flex; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 15px; background: rgba(18, 31, 47, .68); }
+    .guard-icon { display: grid; flex: 0 0 29px; place-items: center; width: 29px; height: 29px; border: 1px solid rgba(215, 244, 154, .35); border-radius: 9px; color: var(--lime); font-size: 15px; }
+    .guard strong { display: block; margin-bottom: 4px; font-size: 14px; }
+    .guard span { display: block; color: var(--muted); font-size: 12px; }
+
+    .decision { padding: 19px; border: 1px solid var(--line); border-radius: 17px; background: rgba(18, 31, 47, .7); }
+    .decision h3 { margin-bottom: 13px; }
+    .decision ul { margin: 0; padding-left: 18px; color: #cbd9e6; font-size: 13px; }
+    .decision li + li { margin-top: 7px; }
+
+    .quote {
+      position: relative;
+      margin: 21px 0 0;
+      padding: 19px 22px 19px 25px;
+      border-left: 3px solid var(--orange);
+      color: #e5edf4;
+      background: rgba(255, 118, 89, .075);
+      font-size: clamp(17px, 2vw, 25px);
+      line-height: 1.4;
+      letter-spacing: -.025em;
+    }
+
+    .closing {
+      display: grid;
+      place-items: center;
+      align-content: center;
+      text-align: center;
+    }
+    .closing h2 { max-width: 780px; }
+    .closing .lead { max-width: 680px; }
+    .closing .tag-row { justify-content: center; margin-top: 21px; }
+
+    .footer-note {
+      position: absolute;
+      right: clamp(30px, 4.2vw, 68px);
+      bottom: 18px;
+      color: #62758a;
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: 10px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .controls {
+      position: fixed;
+      right: 22px;
+      bottom: 18px;
+      left: 22px;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      max-width: 1240px;
+      margin: auto;
+      padding: 9px 11px;
+      border: 1px solid rgba(185, 211, 234, .17);
+      border-radius: 14px;
+      background: rgba(7, 13, 22, .82);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, .24);
+      backdrop-filter: blur(16px);
+    }
+    .controls button { display: grid; place-items: center; min-width: 33px; height: 30px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: rgba(255,255,255,.04); cursor: pointer; }
+    .controls button:hover, .controls button:focus-visible { border-color: var(--orange); color: var(--orange-soft); outline: none; }
+    .counter { width: 55px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; text-align: center; }
+    .progress { flex: 1; height: 3px; border-radius: 999px; background: rgba(255,255,255,.1); overflow: hidden; }
+    .progress span { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--orange), var(--cyan)); transition: width .25s ease; }
+    .hint { color: #667b90; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; }
+
+    @media (max-width: 930px) {
+      .grid-5 { grid-template-columns: repeat(3, 1fr); }
+      .w-card { min-height: 135px; }
+      .slide { min-height: 650px; }
+      .hint { display: none; }
+    }
+
+    @media (max-width: 700px) {
+      .deck { padding: 14px 10px 70px; }
+      .slide, .slide.cover { display: none; width: 100%; min-height: calc(100vh - 95px); max-height: none; aspect-ratio: auto; padding: 27px 21px 52px; border-radius: 19px; }
+      .slide.active { display: block; overflow-y: auto; }
+      .slide.cover.active { display: grid; }
+      .cover-image { inset: 30% 0 0; }
+      .cover-copy { align-self: start; padding: 31px 22px; }
+      h1 { font-size: clamp(39px, 13vw, 62px); }
+      h2 { font-size: clamp(31px, 10vw, 46px); }
+      .slide-head { margin-bottom: 19px; }
+      .slide-head p { font-size: 13px; }
+      .split { grid-template-columns: 1fr; gap: 20px; }
+      .visual { min-height: 210px; }
+      .grid-5 { grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 17px; }
+      .w-card { min-height: 126px; padding: 14px; }
+      .w-card p { font-size: 12px; }
+      .w-card strong { margin-bottom: 8px; font-size: 13px; }
+      .metric-row, .guard-grid, .decision-grid { grid-template-columns: 1fr; }
+      .compare { grid-template-columns: 1fr; }
+      .compare-arrow { transform: rotate(90deg); }
+      .flow { grid-template-columns: 1fr; gap: 8px; }
+      .flow-step, .flow-step:last-child { min-height: 0; border-right: 1px solid var(--line); border-radius: 13px; }
+      .flow-step:not(:last-child)::after { top: auto; right: 50%; bottom: -8px; transform: translateX(50%) rotate(135deg); }
+      .time-row { grid-template-columns: 63px 1fr; gap: 9px; padding: 12px 0; }
+      .time-row span { grid-column: 2; }
+      .prompt { grid-template-columns: 1fr; gap: 6px; }
+      .terminal pre { font-size: 10px; }
+      .footer-note { right: 21px; bottom: 16px; }
+    }
+
+    @media print {
+      body { background: #fff; }
+      .deck { display: block; padding: 0; }
+      .slide, .slide.cover { display: grid !important; width: 100vw; height: 56.25vw; max-height: none; border: 0; border-radius: 0; box-shadow: none; break-after: page; }
+      .controls { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="deck" aria-live="polite">
+    <section class="slide cover active" data-title="표지">
+      <div class="cover-image" aria-hidden="true">
+        <img src="assets/openclaw-brain-overdrive.png" alt="">
+      </div>
+      <div class="cover-copy">
+        <div class="eyebrow">Auto-correction advanced development team</div>
+        <h1>문서를<br><span style="color: var(--orange)">근거</span>로 바꾸는 법</h1>
+        <p class="lead">자동보정선행개발팀을 위한<br><strong>save-your-memory</strong> 5W 브리핑</p>
+        <div class="tag-row" style="margin-top: 28px">
+          <span class="tag hot">5W / 12 MIN</span>
+          <span class="tag cool">LOCAL-FIRST</span>
+          <span class="tag good">SOURCE-LINKED</span>
+        </div>
+      </div>
+      <div class="footer-note">internal explainer · open with arrow keys</div>
+    </section>
+
+    <section class="slide" data-title="5W 한 장 요약">
+      <div class="slide-head">
+        <div>
+          <div class="eyebrow">01 / orientation</div>
+          <h2>5W로 먼저 잡는 전체 그림</h2>
+          <p>save-your-memory는 파일을 대신 보관하는 서비스가 아니라, 흩어진 로컬 자료를 검색·근거화하는 컴파일러입니다.</p>
+        </div>
+        <span class="slide-number">01</span>
+      </div>
+      <div class="grid-5">
+        <article class="w-card"><strong>WHO</strong><p>자료를 찾고 원본 근거를 확인해야 하는 개발팀, 그리고 답변을 만드는 Copilot/Codex.</p></article>
+        <article class="w-card"><strong>WHAT</strong><p>Windows 파일 트리를 SQLite FTS5 카탈로그와 Markdown 위키로 컴파일합니다.</p></article>
+        <article class="w-card"><strong>WHY</strong><p>반복 탐색 시간을 줄이고, 답변이 어느 파일에서 왔는지 바로 확인합니다.</p></article>
+        <article class="w-card"><strong>WHERE</strong><p>원본 Root는 읽기 전용, 생성 Home은 별도 경로, 질문은 VS Code Chat에서 실행합니다.</p></article>
+        <article class="w-card"><strong>WHEN</strong><p>최초 인덱싱, 변경분 갱신, 검색, 변환기 재시도, 상태·일관성 점검 때 사용합니다.</p></article>
+      </div>
+      <div class="visual" style="min-height: 190px; margin-top: 22px">
+        <svg viewBox="0 0 760 155" role="img" aria-label="5W가 하나의 근거 검색 흐름으로 연결되는 도식">
+          <defs><linearGradient id="fiveGradient" x1="0" x2="1"><stop stop-color="#ff7659"/><stop offset="1" stop-color="#6ee7f5"/></linearGradient></defs>
+          <path d="M64 78 H688" stroke="url(#fiveGradient)" stroke-width="2" stroke-dasharray="5 8" opacity=".7"/>
+          <g font-family="Segoe UI, Malgun Gothic, sans-serif" text-anchor="middle">
+            <g transform="translate(76 78)"><circle r="38" fill="#ff7659" fill-opacity=".15" stroke="#ff7659"/><text y="-3" fill="#ffb39d" font-size="12" font-weight="700">WHO</text><text y="15" fill="#d8e3ed" font-size="10">사람·에이전트</text></g>
+            <g transform="translate(229 78)"><circle r="38" fill="#8fb7ff" fill-opacity=".14" stroke="#8fb7ff"/><text y="-3" fill="#b9d0ff" font-size="12" font-weight="700">WHAT</text><text y="15" fill="#d8e3ed" font-size="10">컴파일 산출물</text></g>
+            <g transform="translate(382 78)"><circle r="38" fill="#d7f49a" fill-opacity=".12" stroke="#d7f49a"/><text y="-3" fill="#d7f49a" font-size="12" font-weight="700">WHY</text><text y="15" fill="#d8e3ed" font-size="10">근거·재탐색</text></g>
+            <g transform="translate(535 78)"><circle r="38" fill="#6ee7f5" fill-opacity=".13" stroke="#6ee7f5"/><text y="-3" fill="#6ee7f5" font-size="12" font-weight="700">WHERE</text><text y="15" fill="#d8e3ed" font-size="10">Root·Home·Chat</text></g>
+            <g transform="translate(688 78)"><circle r="38" fill="#ff7659" fill-opacity=".15" stroke="#ff7659"/><text y="-3" fill="#ffb39d" font-size="12" font-weight="700">WHEN</text><text y="15" fill="#d8e3ed" font-size="10">운영 순간</text></g>
+          </g>
+        </svg>
+        <span class="visual-label">five questions / one evidence loop</span>
+      </div>
+      <div class="footer-note">save-your-memory · 5W map</div>
+    </section>
+
+    <section class="slide" data-title="WHO">
+      <div class="slide-head">
+        <div>
+          <div class="eyebrow">02 / who</div>
+          <h2>누가 쓰는가: 팀의 기억을 찾는 세 역할</h2>
+          <p>사람이 자료를 소유하고, 인덱서가 구조화하며, Copilot/Codex가 근거를 읽어 답변합니다.</p>
+        </div>
+        <span class="slide-number">02</span>
+      </div>
+      <div class="split">
+        <div class="stack">
+          <article class="card accent">
+            <h3>자동보정선행개발팀</h3>
+            <p>알고리즘 설계, 보정 조건, 실험 결과, 테스트 보고서처럼 파일로 축적되는 팀 지식을 질문합니다.</p>
+            <div class="tag-row"><span class="tag hot">knowledge owner</span><span class="tag">reviewer</span></div>
+          </article>
+          <article class="card cyan">
+            <h3>save-your-memory</h3>
+            <p>원본을 수정하지 않고 파일 경로·메타데이터·읽을 수 있는 내용을 별도 카탈로그와 위키로 컴파일합니다.</p>
+            <div class="tag-row"><span class="tag cool">scanner</span><span class="tag cool">extractor</span><span class="tag cool">catalog</span></div>
+          </article>
+          <article class="card lime">
+            <h3>Copilot / Codex</h3>
+            <p>검색 결과의 wiki 페이지와 source 경로를 읽고, 지원되는 범위 안에서 요약·위치 안내·상태 설명을 생성합니다.</p>
+            <div class="tag-row"><span class="tag good">answer layer</span><span class="tag">no external LLM key</span></div>
+          </article>
+        </div>
+        <div class="visual">
+          <svg viewBox="0 0 480 330" role="img" aria-label="팀, save-your-memory, Copilot 세 역할의 연결 도식">
+            <defs><marker id="arrowWho" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7 Z" fill="#ff7659"/></marker></defs>
+            <g font-family="Segoe UI, Malgun Gothic, sans-serif">
+              <rect x="32" y="28" width="170" height="82" rx="16" fill="#ff7659" fill-opacity=".14" stroke="#ff7659"/>
+              <text x="52" y="59" fill="#ffb39d" font-size="12" font-weight="700">TEAM</text><text x="52" y="83" fill="#edf5fa" font-size="17" font-weight="700">자동보정선행개발</text>
+              <rect x="139" y="137" width="202" height="88" rx="16" fill="#6ee7f5" fill-opacity=".11" stroke="#6ee7f5"/>
+              <text x="160" y="171" fill="#6ee7f5" font-size="12" font-weight="700">COMPILE</text><text x="160" y="196" fill="#edf5fa" font-size="18" font-weight="700">save-your-memory</text>
+              <rect x="278" y="250" width="170" height="58" rx="16" fill="#d7f49a" fill-opacity=".1" stroke="#d7f49a"/>
+              <text x="299" y="275" fill="#d7f49a" font-size="12" font-weight="700">ANSWER</text><text x="299" y="296" fill="#edf5fa" font-size="16" font-weight="700">Copilot / Codex</text>
+              <path d="M151 112 C154 124 178 133 196 139" fill="none" stroke="#ff7659" stroke-width="2" marker-end="url(#arrowWho)"/>
+              <path d="M319 226 C342 237 359 242 369 251" fill="none" stroke="#6ee7f5" stroke-width="2" marker-end="url(#arrowWho)"/>
+              <path d="M285 250 C263 235 254 225 247 220" fill="none" stroke="#d7f49a" stroke-width="1.5" stroke-dasharray="4 5"/>
+              <text x="224" y="119" fill="#8498ac" font-size="11">files + questions</text><text x="356" y="237" fill="#8498ac" font-size="11">evidence + links</text>
+            </g>
+          </svg>
+          <span class="visual-label">human / compiler / answer layer</span>
+        </div>
+      </div>
+      <div class="footer-note">WHO · ownership stays with the team</div>
+    </section>
+
+    <section class="slide" data-title="WHAT">
+      <div class="slide-head">
+        <div>
+          <div class="eyebrow">03 / what</div>
+          <h2>무엇인가: 파일 폴더를 두 개의 근거 산출물로 컴파일</h2>
+          <p>한 번의 인덱싱이 검색용 카탈로그와 사람이 읽을 수 있는 provenance 위키를 함께 만듭니다.</p>
+        </div>
+        <span class="slide-number">03</span>
+      </div>
+      <div class="split top">
+        <div>
+          <div class="flow">
+            <div class="flow-step"><span class="step-no">01 / INPUT</span><strong>원본 파일 트리</strong><p>문서, Markdown, Office, PDF, 코드와 설정 파일.</p></div>
+            <div class="flow-step"><span class="step-no">02 / READ</span><strong>안전 스캔·추출</strong><p>size/mtime 변경 감지, 지원 포맷 본문 추출.</p></div>
+            <div class="flow-step"><span class="step-no">03 / STORE</span><strong>SQLite FTS5</strong><p>32 KiB 기본 청크, 파일 단위 검색 결과 병합.</p></div>
+            <div class="flow-step"><span class="step-no">04 / EXPLAIN</span><strong>Markdown 위키</strong><p>원본 경로, 상태, 해시, 추출 방식과 내용을 기록.</p></div>
+          </div>
+          <div class="metric-row">
+            <div class="metric"><strong>index.sqlite3</strong><span>검색·상태 카탈로그</span></div>
+            <div class="metric"><strong>wiki/sources/</strong><span>파일별 근거 페이지</span></div>
+            <div class="metric"><strong>source_path</strong><span>원본 확인 링크</span></div>
+          </div>
+        </div>
+        <div class="visual">
+          <svg viewBox="0 0 470 310" role="img" aria-label="원본 파일이 카탈로그와 위키로 나뉘는 컴파일러 도식">
+            <g font-family="Segoe UI, Malgun Gothic, sans-serif">
+              <g transform="translate(24 72)"><path d="M0 14 Q0 3 11 3 H58 L72 18 V80 Q72 90 61 90 H11 Q0 90 0 80 Z" fill="#ff7659" fill-opacity=".2" stroke="#ff7659"/><path d="M7 30 H65" stroke="#ff7659"/><text x="0" y="116" fill="#ffb39d" font-size="13" font-weight="700">ROOT</text><text x="0" y="136" fill="#a5b8ca" font-size="11">원본·읽기 전용</text></g>
+              <path d="M110 116 H183" stroke="#ff7659" stroke-width="2" stroke-dasharray="5 5"/><path d="M178 110 L188 116 L178 122" fill="none" stroke="#ff7659"/>
+              <g transform="translate(191 38)"><rect width="104" height="72" rx="14" fill="#6ee7f5" fill-opacity=".13" stroke="#6ee7f5"/><text x="18" y="30" fill="#6ee7f5" font-size="11" font-weight="700">SCAN</text><text x="18" y="52" fill="#edf5fa" font-size="15" font-weight="700">extract</text></g>
+              <path d="M243 112 V145 M243 145 H128 V174 M243 145 H353 V174" fill="none" stroke="#6ee7f5" stroke-width="2" stroke-dasharray="5 5"/>
+              <g transform="translate(55 179)"><rect width="145" height="76" rx="14" fill="#8fb7ff" fill-opacity=".13" stroke="#8fb7ff"/><text x="17" y="30" fill="#b9d0ff" font-size="11" font-weight="700">SEARCH</text><text x="17" y="53" fill="#edf5fa" font-size="14" font-weight="700">index.sqlite3</text><text x="17" y="68" fill="#a5b8ca" font-size="10">FTS5 chunks</text></g>
+              <g transform="translate(278 179)"><rect width="145" height="76" rx="14" fill="#d7f49a" fill-opacity=".12" stroke="#d7f49a"/><text x="17" y="30" fill="#d7f49a" font-size="11" font-weight="700">PROVENANCE</text><text x="17" y="53" fill="#edf5fa" font-size="14" font-weight="700">wiki/sources/</text><text x="17" y="68" fill="#a5b8ca" font-size="10">Markdown pages</text></g>
+            </g>
+          </svg>
+          <span class="visual-label">one input / two usable surfaces</span>
+        </div>
+      </div>
+      <div class="footer-note">WHAT · compiler, not a file editor</div>
+    </section>
+
+    <section class="slide" data-title="WHY">
+      <div class="slide-head">
+        <div>
+          <div class="eyebrow">04 / why</div>
+          <h2>왜 필요한가: 검색보다 어려운 것은 근거 추적</h2>
+          <p>팀의 문서가 많아질수록 “어디에 있지?”와 “그 답은 어느 원본이지?”가 분리됩니다.</p>
+        </div>
+        <span class="slide-number">04</span>
+      </div>
+      <div class="compare">
+        <article class="compare-panel before">
+          <h3>도구가 없을 때</h3>
+          <ul class="clean">
+            <li>폴더 이름과 파일명을 기억하며 여러 위치를 반복 탐색</li>
+            <li>큰 문서를 열고 필요한 문단을 다시 찾음</li>
+            <li>답변은 얻어도 원본과의 연결이 끊김</li>
+            <li>문서 형식이 달라질수록 검색 루틴도 달라짐</li>
+          </ul>
+        </article>
+        <div class="compare-arrow" aria-hidden="true">→</div>
+        <article class="compare-panel after">
+          <h3>save-your-memory 이후</h3>
+          <ul class="clean">
+            <li>자연어 질문을 FTS5 카탈로그에 한 번 던짐</li>
+            <li>상위 wiki 페이지를 읽고 필요한 근거만 좁힘</li>
+            <li>답변과 함께 wiki·원본 경로를 확인</li>
+            <li>변경된 파일만 다시 추출해 운영 비용을 줄임</li>
+          </ul>
+        </article>
+      </div>
+      <p class="quote">팀의 기억을 “내가 봤던 파일”에서 “다시 확인할 수 있는 근거”로 바꾸는 것이 핵심입니다.</p>
+      <div class="visual" style="min-height: 92px; margin-top: 17px">
+        <svg viewBox="0 0 760 78" role="img" aria-label="반복 탐색이 근거 확인 흐름으로 바뀌는 도식">
+          <path d="M92 39 H668" stroke="#6ee7f5" stroke-width="2" stroke-dasharray="5 8"/>
+          <g font-family="Segoe UI, Malgun Gothic, sans-serif" text-anchor="middle">
+            <g transform="translate(92 39)"><circle r="22" fill="#ff7659" fill-opacity=".2" stroke="#ff7659"/><text y="4" fill="#edf5fa" font-size="11">찾기</text></g>
+            <g transform="translate(380 39)"><circle r="22" fill="#8fb7ff" fill-opacity=".2" stroke="#8fb7ff"/><text y="4" fill="#edf5fa" font-size="11">읽기</text></g>
+            <g transform="translate(668 39)"><circle r="22" fill="#d7f49a" fill-opacity=".2" stroke="#d7f49a"/><text y="4" fill="#edf5fa" font-size="11">확인</text></g>
+          </g>
+        </svg>
+        <span class="visual-label">rediscovery → evidence</span>
+      </div>
+      <div class="footer-note">WHY · reduce rediscovery, preserve evidence</div>
+    </section>
+
+    <section class="slide" data-title="WHERE">
+      <div class="slide-head">
+        <div>
+          <div class="eyebrow">05 / where</div>
+          <h2>어디에 놓이는가: Root와 Home을 분리</h2>
+          <p>원본 자료와 생성 데이터를 분리해야 안전성과 재생성 가능성을 동시에 얻습니다.</p>
+        </div>
+        <span class="slide-number">05</span>
+      </div>
+      <div class="split">
+        <div class="stack">
+          <article class="card accent">
+            <h3><code>SAVE_YOUR_MEMORY_ROOT</code></h3>
+            <p>팀의 원본 문서가 있는 Windows 부모 폴더입니다. 인덱서는 읽기만 하며 수정·이동·삭제하지 않습니다.</p>
+            <div class="tag-row"><span class="tag hot">immutable</span><span class="tag">Windows 10/11</span></div>
+          </article>
+          <article class="card cyan">
+            <h3><code>SAVE_YOUR_MEMORY_HOME</code></h3>
+            <p>SQLite 카탈로그와 Markdown 위키가 생성되는 별도 폴더입니다. Root와 달라야 하며 공개 저장소 밖에 둡니다.</p>
+            <div class="tag-row"><span class="tag cool">generated</span><span class="tag">rebuildable</span></div>
+          </article>
+          <article class="card lime">
+            <h3>VS Code workspace</h3>
+            <p>Copilot Chat을 실행하는 workspace의 <code>.env</code>에서 경로를 읽고 Agent 모드의 스킬이 CLI를 호출합니다.</p>
+            <div class="tag-row"><span class="tag good">Agent mode</span><span class="tag">.env not committed</span></div>
+          </article>
+        </div>
+        <div class="visual">
+          <svg viewBox="0 0 480 330" role="img" aria-label="읽기 전용 Root와 생성 Home이 경계로 분리된 도식">
+            <g font-family="Segoe UI, Malgun Gothic, sans-serif">
+              <rect x="27" y="40" width="176" height="226" rx="20" fill="#ff7659" fill-opacity=".1" stroke="#ff7659"/>
+              <text x="51" y="76" fill="#ffb39d" font-size="12" font-weight="700">ROOT / SOURCE</text><text x="51" y="104" fill="#edf5fa" font-size="19" font-weight="700">원본 자료</text><text x="51" y="130" fill="#a5b8ca" font-size="12">read only</text>
+              <g transform="translate(53 161)" fill="none" stroke="#ffb39d"><path d="M0 9 Q0 0 9 0 H37 L46 10 V46 Q46 54 37 54 H9 Q0 54 0 46 Z"/><path d="M5 18 H42"/><path d="M13 30 H33"/><path d="M13 39 H28"/></g>
+              <path d="M224 50 V257" stroke="#6ee7f5" stroke-width="2" stroke-dasharray="5 7"/><path d="M216 57 L224 45 L232 57 M216 250 L224 262 L232 250" fill="none" stroke="#6ee7f5"/>
+              <text x="224" y="286" text-anchor="middle" fill="#6ee7f5" font-size="10">경계 / never modify</text>
+              <rect x="276" y="40" width="176" height="226" rx="20" fill="#6ee7f5" fill-opacity=".08" stroke="#6ee7f5"/>
+              <text x="300" y="76" fill="#6ee7f5" font-size="12" font-weight="700">HOME / OUTPUT</text><text x="300" y="104" fill="#edf5fa" font-size="19" font-weight="700">생성 데이터</text><text x="300" y="130" fill="#a5b8ca" font-size="12">catalog + wiki</text>
+              <g transform="translate(303 161)" fill="none" stroke="#6ee7f5"><rect width="49" height="54" rx="5"/><path d="M9 14 H39 M9 26 H39 M9 38 H29"/><circle cx="40" cy="44" r="9" fill="#071018"/><path d="M36 44 L39 47 L45 40"/></g>
+            </g>
+          </svg>
+          <span class="visual-label">data boundary / operational safety</span>
+        </div>
+      </div>
+      <div class="footer-note">WHERE · source boundary is a feature</div>
+    </section>
+
+    <section class="slide" data-title="WHEN">
+      <div class="slide-head">
+        <div>
+          <div class="eyebrow">06 / when</div>
+          <h2>언제 쓰는가: 한 번의 구축, 반복되는 운영</h2>
+          <p>watcher가 계속 도는 방식이 아니라, 필요한 운영 순간에 명시적으로 갱신하고 점검합니다.</p>
+        </div>
+        <span class="slide-number">06</span>
+      </div>
+      <div class="timeline">
+        <div class="time-row"><span class="time-mark">T0 / 처음</span><strong>최초 인덱싱</strong><span><code>index</code>가 전체를 스캔하고 wiki·SQLite를 생성합니다.</span></div>
+        <div class="time-row"><span class="time-mark">T1 / 변경</span><strong>증분 갱신</strong><span>size/mtime이 바뀐 파일만 다시 추출합니다. 변하지 않은 페이지는 재생성하지 않습니다.</span></div>
+        <div class="time-row"><span class="time-mark">T2 / 도구</span><strong>읽기 실패 재시도</strong><span>새 PDF·PPT 변환기를 준비한 뒤 <code>--retry-unreadable</code>로 unsupported/error만 재시도합니다.</span></div>
+        <div class="time-row"><span class="time-mark">T3 / 질문</span><strong>검색과 답변</strong><span>자연어 질문을 던지고, 상위 wiki 페이지와 source 경로를 근거로 답변을 받습니다.</span></div>
+        <div class="time-row"><span class="time-mark">T4 / 점검</span><strong>상태·일관성 확인</strong><span><code>status</code>로 카탈로그 상태를, <code>lint</code>로 누락·고아 페이지를 확인합니다.</span></div>
+      </div>
+      <div class="visual" style="min-height: 112px; margin-top: 18px">
+        <svg viewBox="0 0 880 100" role="img" aria-label="최초 인덱싱부터 반복 운영까지의 시간선">
+          <path d="M50 50 H830" stroke="#6ee7f5" stroke-width="2" stroke-dasharray="4 8"/>
+          <g font-family="ui-monospace, SFMono-Regular, Consolas, monospace" text-anchor="middle">
+            <g transform="translate(90 50)"><circle r="14" fill="#ff7659"/><text y="4" fill="#071018" font-size="10" font-weight="700">T0</text></g>
+            <g transform="translate(265 50)"><circle r="14" fill="#ffb39d"/><text y="4" fill="#071018" font-size="10" font-weight="700">T1</text></g>
+            <g transform="translate(440 50)"><circle r="14" fill="#8fb7ff"/><text y="4" fill="#071018" font-size="10" font-weight="700">T2</text></g>
+            <g transform="translate(615 50)"><circle r="14" fill="#6ee7f5"/><text y="4" fill="#071018" font-size="10" font-weight="700">T3</text></g>
+            <g transform="translate(790 50)"><circle r="14" fill="#d7f49a"/><text y="4" fill="#071018" font-size="10" font-weight="700">T4</text></g>
+          </g>
+        </svg>
+        <span class="visual-label">explicit refresh / predictable lifecycle</span>
+      </div>
+      <div class="footer-note">WHEN · index deliberately, ask continuously</div>
+    </section>
+
+    <section class="slide" data-title="검색 흐름">
+      <div class="slide-head">
+        <div>
+          <div class="eyebrow">07 / retrieval</div>
+          <h2>질문 한 줄이 근거가 되는 과정</h2>
+          <p>검색 계층과 답변 계층을 분리해, Copilot이 먼저 찾고 그 뒤에 설명하게 합니다.</p>
+        </div>
+        <span class="slide-number">07</span>
+      </div>
+      <div class="flow" style="margin-top: 35px">
+        <div class="flow-step"><span class="step-no">01 / ASK</span><strong>질문 그대로 입력</strong><p>키워드 요약을 임의로 만들지 않고 사용자의 자연어 질문을 그대로 검색합니다.</p></div>
+        <div class="flow-step"><span class="step-no">02 / RETRIEVE</span><strong>FTS5 + BM25</strong><p>청크를 검색하고 파일별로 합칩니다. 한글은 bigram으로 붙여쓰기 변형도 보완합니다.</p></div>
+        <div class="flow-step"><span class="step-no">03 / VERIFY</span><strong>wiki를 좁혀 읽기</strong><p>상위 1~3개 wiki 페이지를 읽고 provenance의 원본 경로를 따라갑니다.</p></div>
+        <div class="flow-step"><span class="step-no">04 / ANSWER</span><strong>답변 + Sources</strong><p>확인된 주장만 말하고 wiki 페이지와 원본 파일을 Sources로 남깁니다.</p></div>
+      </div>
+      <div class="split" style="margin-top: 22px; align-items: stretch">
+        <article class="card accent"><h3>정확도를 높이는 현재 장치</h3><ul class="clean"><li>긴 문서도 32 KiB 청크로 나누고 파일당 최상위 결과 하나로 병합</li><li>한글 복합어를 문자 bigram으로 보강</li><li>AND 매치가 전무할 때만 OR 폴백</li></ul></article>
+        <article class="card cyan"><h3>답변의 경계</h3><ul class="clean"><li>검색 결과에 없는 내용을 추측하지 않음</li><li>읽지 못한 파일은 내용을 이해했다고 주장하지 않음</li><li>모순된 문서의 정책적 판단은 팀 리뷰 영역</li></ul></article>
+      </div>
+      <div class="visual" style="min-height: 92px; margin-top: 17px">
+        <svg viewBox="0 0 760 78" role="img" aria-label="검색 결과가 위키와 원본 링크로 이어지는 도식">
+          <path d="M74 39 H686" stroke="#ff7659" stroke-width="2" stroke-dasharray="5 8"/>
+          <g font-family="Segoe UI, Malgun Gothic, sans-serif" text-anchor="middle">
+            <g transform="translate(74 39)"><rect x="-45" y="-22" width="90" height="44" rx="12" fill="#ff7659" fill-opacity=".17" stroke="#ff7659"/><text y="4" fill="#edf5fa" font-size="11">질문</text></g>
+            <g transform="translate(305 39)"><rect x="-55" y="-22" width="110" height="44" rx="12" fill="#6ee7f5" fill-opacity=".14" stroke="#6ee7f5"/><text y="4" fill="#edf5fa" font-size="11">FTS5 검색</text></g>
+            <g transform="translate(535 39)"><rect x="-55" y="-22" width="110" height="44" rx="12" fill="#8fb7ff" fill-opacity=".14" stroke="#8fb7ff"/><text y="4" fill="#edf5fa" font-size="11">wiki</text></g>
+            <g transform="translate(686 39)"><rect x="-45" y="-22" width="90" height="44" rx="12" fill="#d7f49a" fill-opacity=".14" stroke="#d7f49a"/><text y="4" fill="#edf5fa" font-size="11">원본</text></g>
+          </g>
+        </svg>
+        <span class="visual-label">retrieve → verify → cite</span>
+      </div>
+      <div class="footer-note">HOW · retrieve first, explain second</div>
+    </section>
+
+    <section class="slide" data-title="팀 활용">
+      <div class="slide-head">
+        <div>
+          <div class="eyebrow">08 / team use</div>
+          <h2>자동보정선행개발팀에서 바로 던질 질문</h2>
+          <p>자료를 요약하는 것보다 “조건·변경·근거”를 함께 묻는 질문이 효과적입니다.</p>
+        </div>
+        <span class="slide-number">08</span>
+      </div>
+      <div class="prompt-list">
+        <div class="prompt"><span class="prompt-label">설계 근거</span><code>온도 보정 알고리즘의 설계 조건과 변경 이력을 찾아 원본 링크와 함께 요약해줘.</code></div>
+        <div class="prompt"><span class="prompt-label">시험 재현</span><code>캘리브레이션 기준, 입력 조건, 합격 기준이 각각 어느 문서에 있는지 표로 정리해줘.</code></div>
+        <div class="prompt"><span class="prompt-label">변경 영향</span><code>새로 추가된 보정 테스트 보고서를 인덱싱하고 기존 관련 자료와 차이를 찾아줘.</code></div>
+        <div class="prompt"><span class="prompt-label">원본 탐색</span><code>이 결과의 근거가 되는 원본 파일과 생성된 wiki 페이지 경로를 모두 보여줘.</code></div>
+        <div class="prompt"><span class="prompt-label">운영 점검</span><code>위키 상태와 누락·고아 페이지를 검사하고 읽기 실패 파일도 알려줘.</code></div>
+      </div>
+      <div class="visual" style="min-height: 108px; margin-top: 17px">
+        <svg viewBox="0 0 880 95" role="img" aria-label="질문이 설계, 시험, 변경, 원본, 점검 결과로 연결되는 도식">
+          <g font-family="Segoe UI, Malgun Gothic, sans-serif" text-anchor="middle">
+            <path d="M90 50 H790" stroke="#ff7659" stroke-width="2" stroke-dasharray="4 7"/>
+            <g transform="translate(90 50)"><circle r="21" fill="#ff7659" fill-opacity=".22" stroke="#ff7659"/><text y="4" fill="#edf5fa" font-size="11">질문</text></g>
+            <g transform="translate(265 50)"><circle r="21" fill="#8fb7ff" fill-opacity=".2" stroke="#8fb7ff"/><text y="4" fill="#edf5fa" font-size="11">조건</text></g>
+            <g transform="translate(440 50)"><circle r="21" fill="#6ee7f5" fill-opacity=".2" stroke="#6ee7f5"/><text y="4" fill="#edf5fa" font-size="11">근거</text></g>
+            <g transform="translate(615 50)"><circle r="21" fill="#d7f49a" fill-opacity=".2" stroke="#d7f49a"/><text y="4" fill="#edf5fa" font-size="11">답변</text></g>
+            <g transform="translate(790 50)"><circle r="21" fill="#ff7659" fill-opacity=".22" stroke="#ff7659"/><text y="4" fill="#edf5fa" font-size="11">링크</text></g>
+          </g>
+        </svg>
+        <span class="visual-label">team language / evidence-aware prompts</span>
+      </div>
+      <div class="footer-note">TEAM USE · ask for conditions and provenance</div>
+    </section>
+
+    <section class="slide" data-title="Copilot 사용법">
+      <div class="slide-head">
+        <div>
+          <div class="eyebrow">09 / vscode copilot</div>
+          <h2>VS Code GitHub Copilot Chat에서 전부 실행</h2>
+          <p>별도 터미널을 직접 입력하지 않아도 Agent 스킬이 bundled Python CLI를 호출합니다.</p>
+        </div>
+        <span class="slide-number">09</span>
+      </div>
+      <div class="split">
+        <div class="stack">
+          <div class="card accent"><h3>1. 한 번만 준비</h3><p>플러그인 설치 → Plugins에서 enabled 확인 → 질문을 실행할 workspace에 <code>.env</code> 생성 → Chat 모드를 <strong>Agent</strong>로 선택.</p></div>
+          <div class="card cyan"><h3>2. 스킬 호출</h3><p><code>/save-your-memory:save-your-memory</code>를 선택합니다. 이름이 두 번 반복되는 것은 정상입니다.</p></div>
+          <div class="card lime"><h3>3. 권한 확인</h3><p>첫 실행의 Terminal tool 승인에서 대상이 이 플러그인의 <code>scripts/save_your_memory.py</code>인지 확인합니다.</p></div>
+        </div>
+        <div class="terminal" role="img" aria-label="Copilot에서 save-your-memory 스킬을 호출하는 예시">
+          <div class="terminal-bar"><i></i><i></i><i></i></div>
+          <pre><span class="comment"># 최초 인덱싱</span>
+<span class="cmd">/save-your-memory:save-your-memory</span>
+처음부터 내 자료를 인덱싱해줘.
+
+<span class="comment"># 검색</span>
+<span class="cmd">/save-your-memory:save-your-memory</span>
+온도보정알고리즘 자료를 원본 링크와 함께 찾아줘.
+
+<span class="comment"># 운영 점검</span>
+<span class="cmd">/save-your-memory:save-your-memory</span>
+위키 상태와 누락 페이지를 검사해줘.</pre>
+        </div>
+      </div>
+      <div class="visual" style="min-height: 92px; margin-top: 17px">
+        <svg viewBox="0 0 760 78" role="img" aria-label="workspace에서 Agent 스킬을 통해 CLI가 실행되는 도식">
+          <path d="M87 39 H673" stroke="#6ee7f5" stroke-width="2" stroke-dasharray="5 8"/>
+          <g font-family="Segoe UI, Malgun Gothic, sans-serif" text-anchor="middle">
+            <g transform="translate(87 39)"><rect x="-55" y="-22" width="110" height="44" rx="12" fill="#ff7659" fill-opacity=".17" stroke="#ff7659"/><text y="4" fill="#edf5fa" font-size="11">workspace</text></g>
+            <g transform="translate(300 39)"><rect x="-48" y="-22" width="96" height="44" rx="12" fill="#8fb7ff" fill-opacity=".15" stroke="#8fb7ff"/><text y="4" fill="#edf5fa" font-size="11">Agent</text></g>
+            <g transform="translate(500 39)"><rect x="-48" y="-22" width="96" height="44" rx="12" fill="#6ee7f5" fill-opacity=".14" stroke="#6ee7f5"/><text y="4" fill="#edf5fa" font-size="11">SKILL.md</text></g>
+            <g transform="translate(673 39)"><rect x="-55" y="-22" width="110" height="44" rx="12" fill="#d7f49a" fill-opacity=".14" stroke="#d7f49a"/><text y="4" fill="#edf5fa" font-size="11">Python CLI</text></g>
+          </g>
+        </svg>
+        <span class="visual-label">chat prompt / trusted execution</span>
+      </div>
+      <div class="footer-note">VS CODE · Agent mode, workspace .env</div>
+    </section>
+
+    <section class="slide" data-title="안전 계약">
+      <div class="slide-head">
+        <div>
+          <div class="eyebrow">10 / safety contract</div>
+          <h2>팀에 설명해야 할 운영 계약</h2>
+          <p>검색 편의보다 먼저 합의할 것은 원본 보호, 생성 데이터 경계, 실패의 투명성입니다.</p>
+        </div>
+        <span class="slide-number">10</span>
+      </div>
+      <div class="split">
+        <div>
+          <div class="guard-grid">
+            <div class="guard"><span class="guard-icon">◈</span><div><strong>원본 불변</strong><span>Root 아래 파일을 편집·이동·삭제하지 않음</span></div></div>
+            <div class="guard"><span class="guard-icon">⌁</span><div><strong>링크 미탐색</strong><span>symlink·junction·reparse point를 따라가지 않음</span></div></div>
+            <div class="guard"><span class="guard-icon">↗</span><div><strong>생성물 분리</strong><span>SQLite·wiki는 Home에만 생성</span></div></div>
+            <div class="guard"><span class="guard-icon">!</span><div><strong>실패 공개</strong><span>unsupported/error는 경로·상태로 남김</span></div></div>
+            <div class="guard"><span class="guard-icon">▣</span><div><strong>개인정보 주의</strong><span>.env·개인 문서·로컬 경로를 커밋하지 않음</span></div></div>
+            <div class="guard"><span class="guard-icon">◎</span><div><strong>근거 우선</strong><span>검색되지 않은 주장은 답변하지 않음</span></div></div>
+          </div>
+        </div>
+        <div class="visual">
+          <svg viewBox="0 0 380 330" role="img" aria-label="원본을 보호하는 방패와 안전 계약 도식">
+            <g font-family="Segoe UI, Malgun Gothic, sans-serif" text-anchor="middle">
+              <path d="M190 31 L300 73 V157 C300 225 253 270 190 298 C127 270 80 225 80 157 V73 Z" fill="#d7f49a" fill-opacity=".1" stroke="#d7f49a" stroke-width="2"/>
+              <path d="M190 64 L266 93 V154 C266 203 235 235 190 258 C145 235 114 203 114 154 V93 Z" fill="#071018" stroke="#6ee7f5"/>
+              <path d="M157 157 L180 180 L228 127" fill="none" stroke="#d7f49a" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+              <text x="190" y="119" fill="#6ee7f5" font-size="12" font-weight="700">SOURCE SAFE</text>
+              <text x="190" y="320" fill="#a5b8ca" font-size="11">immutable · isolated · inspectable</text>
+            </g>
+          </svg>
+          <span class="visual-label">safety is part of the product</span>
+        </div>
+      </div>
+      <div class="footer-note">SAFETY · convenience without source mutation</div>
+    </section>
+
+    <section class="slide" data-title="기능 전체">
+      <div class="slide-head">
+        <div>
+          <div class="eyebrow">11 / complete surface</div>
+          <h2>기능은 네 명령으로 나뉩니다</h2>
+          <p>Copilot Chat에서는 자연어로 요청하지만, 내부적으로는 아래 CLI 계약이 실행됩니다.</p>
+        </div>
+        <span class="slide-number">11</span>
+      </div>
+      <div class="split">
+        <div class="terminal" role="img" aria-label="save-your-memory CLI 명령 예시">
+          <div class="terminal-bar"><i></i><i></i><i></i></div>
+          <pre><span class="comment"># 변경분 반영</span>
+<span class="cmd">index --json</span>
+
+<span class="comment"># unsupported/error 재시도</span>
+<span class="cmd">index --retry-unreadable --json</span>
+
+<span class="comment"># 검색 근거</span>
+<span class="cmd">query "질문" --limit 5 --json</span>
+
+<span class="comment"># 상태 / 위키 일관성</span>
+<span class="cmd">status --json</span>
+<span class="cmd">lint --json</span></pre>
+        </div>
+        <div class="stack">
+          <article class="card accent"><h3><code>index</code></h3><p>처음에는 전체, 이후에는 변경 파일 중심. 결과에서 added·updated·unchanged·removed·오류 건수를 확인합니다.</p></article>
+          <article class="card cyan"><h3><code>query</code></h3><p>질문과 근거를 JSON으로 반환. Copilot은 보통 상위 1~3개 wiki 페이지를 읽습니다.</p></article>
+          <article class="card lime"><h3><code>status / lint</code></h3><p>상태 숫자와 위키 일관성을 별도로 점검. 고아 페이지는 사용자 승인 없이 삭제하지 않습니다.</p></article>
+        </div>
+      </div>
+      <div class="visual" style="min-height: 92px; margin-top: 17px">
+        <svg viewBox="0 0 760 78" role="img" aria-label="네 가지 CLI 명령이 운영 루프를 이루는 도식">
+          <g font-family="ui-monospace, SFMono-Regular, Consolas, monospace" text-anchor="middle">
+            <path d="M105 39 H655" stroke="#ff7659" stroke-width="2" stroke-dasharray="5 8"/>
+            <g transform="translate(105 39)"><circle r="23" fill="#ff7659" fill-opacity=".2" stroke="#ff7659"/><text y="4" fill="#edf5fa" font-size="11">index</text></g>
+            <g transform="translate(288 39)"><circle r="23" fill="#6ee7f5" fill-opacity=".2" stroke="#6ee7f5"/><text y="4" fill="#edf5fa" font-size="11">query</text></g>
+            <g transform="translate(472 39)"><circle r="23" fill="#8fb7ff" fill-opacity=".2" stroke="#8fb7ff"/><text y="4" fill="#edf5fa" font-size="11">status</text></g>
+            <g transform="translate(655 39)"><circle r="23" fill="#d7f49a" fill-opacity=".2" stroke="#d7f49a"/><text y="4" fill="#edf5fa" font-size="11">lint</text></g>
+          </g>
+        </svg>
+        <span class="visual-label">four commands / one operating contract</span>
+      </div>
+      <div class="footer-note">SURFACE · index / query / status / lint</div>
+    </section>
+
+    <section class="slide" data-title="도입 판단">
+      <div class="slide-head">
+        <div>
+          <div class="eyebrow">12 / decision</div>
+          <h2>우리 팀에 도입할 때의 판단 기준</h2>
+          <p>작게 시작해 검색 품질과 근거 연결을 확인한 뒤, 원본 범위를 늘리는 접근이 안전합니다.</p>
+        </div>
+        <span class="slide-number">12</span>
+      </div>
+      <div class="decision-grid">
+        <article class="decision"><h3 style="color: var(--lime)">잘 맞는 경우</h3><ul><li>문서가 로컬 Windows 폴더에 흩어져 있음</li><li>파일 위치와 원본 링크가 중요한 답변을 자주 만듦</li><li>Python 3.11+와 SQLite FTS5를 사용할 수 있음</li><li>Copilot/Codex를 답변 계층으로 사용함</li></ul></article>
+        <article class="decision"><h3 style="color: var(--danger)">기대치를 조정할 경우</h3><ul><li>이미지 전용 문서는 OCR 없이는 본문 검색이 어려움</li><li>변환기 없는 레거시 PPT는 경로·메타데이터 검색만 가능</li><li>암호화·손상 PDF나 바이너리 본문을 이해해 주지는 않음</li><li>자동 실시간 감시나 문서 간 진실성 판정 도구는 아님</li></ul></article>
+      </div>
+      <div class="metric-row" style="margin-top: 24px">
+        <div class="metric"><strong>1 folder</strong><span>민감하지 않은 작은 Root로 시작</span></div>
+        <div class="metric"><strong>3 questions</strong><span>실제 업무 질문으로 회수율 확인</span></div>
+        <div class="metric"><strong>1 review</strong><span>Source 링크와 lint 결과 검토</span></div>
+      </div>
+      <div class="visual" style="min-height: 105px; margin-top: 18px">
+        <svg viewBox="0 0 880 90" role="img" aria-label="작은 폴더에서 검증 후 범위를 확장하는 도입 단계">
+          <g font-family="Segoe UI, Malgun Gothic, sans-serif" text-anchor="middle">
+            <path d="M95 45 H785" stroke="#6ee7f5" stroke-width="2" stroke-dasharray="5 8"/>
+            <g transform="translate(95 45)"><circle r="24" fill="#ff7659" fill-opacity=".2" stroke="#ff7659"/><text y="4" fill="#edf5fa" font-size="11">작게</text></g>
+            <g transform="translate(325 45)"><circle r="24" fill="#8fb7ff" fill-opacity=".2" stroke="#8fb7ff"/><text y="4" fill="#edf5fa" font-size="11">질문</text></g>
+            <g transform="translate(555 45)"><circle r="24" fill="#d7f49a" fill-opacity=".2" stroke="#d7f49a"/><text y="4" fill="#edf5fa" font-size="11">검토</text></g>
+            <g transform="translate(785 45)"><circle r="24" fill="#6ee7f5" fill-opacity=".2" stroke="#6ee7f5"/><text y="4" fill="#edf5fa" font-size="11">확장</text></g>
+          </g>
+        </svg>
+        <span class="visual-label">pilot / inspect / expand</span>
+      </div>
+      <div class="footer-note">DECISION · start narrow, verify evidence</div>
+    </section>
+
+    <section class="slide closing" data-title="마무리">
+      <div class="eyebrow">13 / close</div>
+      <h2>기억을 자동화한다는 말의 실제 의미</h2>
+      <p class="lead">문서를 대신 판단하는 것이 아니라,<br>팀이 다시 찾고 다시 확인할 수 있게 만드는 것입니다.</p>
+      <div class="tag-row">
+        <span class="tag hot">WHO · 팀의 지식</span>
+        <span class="tag cool">WHAT · 검색 + 위키</span>
+        <span class="tag good">WHY · 근거의 재사용</span>
+      </div>
+      <p class="quote" style="max-width: 770px; text-align: left">다음 액션: 민감하지 않은 문서 폴더 하나를 정하고, 대표 질문 세 개로 검색 결과와 원본 링크를 함께 검토합니다.</p>
+      <div class="visual" style="width: min(770px, 100%); min-height: 105px; margin-top: 20px">
+        <svg viewBox="0 0 760 90" role="img" aria-label="팀 문서가 검색과 근거 확인으로 이어지는 마무리 흐름">
+          <path d="M92 45 H668" stroke="#6ee7f5" stroke-width="2" stroke-dasharray="5 8"/>
+          <g font-family="Segoe UI, Malgun Gothic, sans-serif" text-anchor="middle">
+            <g transform="translate(92 45)"><circle r="23" fill="#ff7659" fill-opacity=".2" stroke="#ff7659"/><text y="4" fill="#edf5fa" font-size="11">팀 문서</text></g>
+            <g transform="translate(380 45)"><circle r="23" fill="#6ee7f5" fill-opacity=".2" stroke="#6ee7f5"/><text y="4" fill="#edf5fa" font-size="11">검색</text></g>
+            <g transform="translate(668 45)"><circle r="23" fill="#d7f49a" fill-opacity=".2" stroke="#d7f49a"/><text y="4" fill="#edf5fa" font-size="11">근거 확인</text></g>
+          </g>
+        </svg>
+        <span class="visual-label">remember / retrieve / verify</span>
+      </div>
+      <div class="footer-note">save-your-memory · questions welcome</div>
+    </section>
+  </main>
+
+  <nav class="controls" aria-label="슬라이드 제어">
+    <button type="button" data-action="prev" aria-label="이전 슬라이드">←</button>
+    <button type="button" data-action="next" aria-label="다음 슬라이드">→</button>
+    <span class="counter" aria-live="polite">01 / 14</span>
+    <div class="progress" aria-hidden="true"><span></span></div>
+    <span class="hint">← → · space · home/end · F fullscreen</span>
+    <button type="button" data-action="fullscreen" aria-label="전체 화면">⛶</button>
+  </nav>
+
+  <script>
+    (() => {
+      const slides = Array.from(document.querySelectorAll('.slide'));
+      const counter = document.querySelector('.counter');
+      const progress = document.querySelector('.progress span');
+      let current = 0;
+
+      function render(index) {
+        current = (index + slides.length) % slides.length;
+        slides.forEach((slide, slideIndex) => {
+          slide.classList.toggle('active', slideIndex === current);
+          slide.setAttribute('aria-hidden', slideIndex === current ? 'false' : 'true');
+        });
+        counter.textContent = `${String(current + 1).padStart(2, '0')} / ${String(slides.length).padStart(2, '0')}`;
+        progress.style.width = `${((current + 1) / slides.length) * 100}%`;
+        document.title = `${slides[current].dataset.title} · save-your-memory`;
+      }
+
+      function next() { render(current + 1); }
+      function previous() { render(current - 1); }
+
+      document.querySelector('[data-action="next"]').addEventListener('click', next);
+      document.querySelector('[data-action="prev"]').addEventListener('click', previous);
+      document.querySelector('[data-action="fullscreen"]').addEventListener('click', async () => {
+        if (!document.fullscreenElement) {
+          await document.documentElement.requestFullscreen?.();
+        } else {
+          await document.exitFullscreen?.();
+        }
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') {
+          event.preventDefault();
+          next();
+        } else if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
+          event.preventDefault();
+          previous();
+        } else if (event.key === 'Home') {
+          render(0);
+        } else if (event.key === 'End') {
+          render(slides.length - 1);
+        } else if (event.key.toLowerCase() === 'f') {
+          document.querySelector('[data-action="fullscreen"]').click();
+        }
+      });
+
+      let touchStartX = null;
+      document.addEventListener('touchstart', (event) => { touchStartX = event.changedTouches[0].screenX; }, { passive: true });
+      document.addEventListener('touchend', (event) => {
+        if (touchStartX === null) return;
+        const delta = event.changedTouches[0].screenX - touchStartX;
+        if (Math.abs(delta) > 45) (delta < 0 ? next : previous)();
+        touchStartX = null;
+      }, { passive: true });
+
+      render(0);
+    })();
+  </script>
+</body>
+</html>
