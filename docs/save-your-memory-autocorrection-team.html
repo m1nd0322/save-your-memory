@@ -30,6 +30,7 @@
       margin: 0;
       min-width: 320px;
       color: var(--ink);
+      overscroll-behavior: none;
       background:
         radial-gradient(circle at 12% 10%, rgba(255, 118, 89, .13), transparent 30rem),
         radial-gradient(circle at 88% 88%, rgba(110, 231, 245, .08), transparent 34rem),
@@ -45,6 +46,10 @@
       place-items: center;
       min-height: 100vh;
       padding: 30px 24px 86px;
+    }
+
+    @media (min-width: 701px) {
+      html, body { overflow: hidden; }
     }
 
     .slide {
@@ -388,7 +393,6 @@
     }
 
     .closing {
-      display: grid;
       place-items: center;
       align-content: center;
       text-align: center;
@@ -959,7 +963,7 @@
     <button type="button" data-action="next" aria-label="다음 슬라이드">→</button>
     <span class="counter" aria-live="polite">01 / 13</span>
     <div class="progress" aria-hidden="true"><span></span></div>
-    <span class="hint">← → · space · home/end · F fullscreen</span>
+    <span class="hint">← → · wheel · space · home/end · F fullscreen</span>
     <button type="button" data-action="fullscreen" aria-label="전체 화면">⛶</button>
   </nav>
 
@@ -983,6 +987,7 @@
 
       function next() { render(current + 1); }
       function previous() { render(current - 1); }
+      let lastWheelAt = Number.NEGATIVE_INFINITY;
 
       document.querySelector('[data-action="next"]').addEventListener('click', next);
       document.querySelector('[data-action="prev"]').addEventListener('click', previous);
@@ -993,6 +998,18 @@
           await document.exitFullscreen?.();
         }
       });
+
+      document.addEventListener('wheel', (event) => {
+        if (!window.matchMedia('(min-width: 701px)').matches) return;
+        if (event.ctrlKey || event.metaKey) return;
+        if (event.target instanceof Element && event.target.closest('.controls')) return;
+        if (event.deltaY === 0) return;
+        event.preventDefault();
+        const now = performance.now();
+        if (now - lastWheelAt < 650) return;
+        lastWheelAt = now;
+        event.deltaY > 0 ? next() : previous();
+      }, { passive: false });
 
       document.addEventListener('keydown', (event) => {
         if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') {
