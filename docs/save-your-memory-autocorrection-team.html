@@ -65,17 +65,6 @@
       isolation: isolate;
     }
 
-    .slide::before {
-      position: absolute;
-      z-index: -1;
-      inset: 0;
-      background-image: linear-gradient(rgba(255, 255, 255, .025) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255, 255, 255, .025) 1px, transparent 1px);
-      background-size: 42px 42px;
-      content: "";
-      mask-image: linear-gradient(to bottom right, black, transparent 72%);
-    }
-
     .slide.active { display: grid; }
 
     .slide.cover {
@@ -192,34 +181,11 @@
       letter-spacing: .12em;
     }
 
-    .grid-5 {
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 10px;
-      margin-top: 24px;
-    }
-
-    .w-card, .card {
+    .card {
       border: 1px solid var(--line);
       border-radius: 16px;
       background: rgba(18, 31, 47, .74);
     }
-
-    .w-card {
-      min-height: 175px;
-      padding: 18px 16px;
-    }
-
-    .w-card strong {
-      display: block;
-      margin-bottom: 13px;
-      color: var(--orange-soft);
-      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-      font-size: 15px;
-      letter-spacing: .12em;
-    }
-
-    .w-card p { margin-bottom: 0; color: #d4e0eb; font-size: 14px; line-height: 1.55; }
 
     .split {
       display: grid;
@@ -304,16 +270,6 @@
       border-radius: 21px;
       background: rgba(7, 15, 25, .42);
       overflow: hidden;
-    }
-
-    .visual::before {
-      position: absolute;
-      width: 240px;
-      height: 240px;
-      border: 1px solid rgba(110, 231, 245, .15);
-      border-radius: 50%;
-      box-shadow: 0 0 0 26px rgba(110, 231, 245, .025), 0 0 0 52px rgba(110, 231, 245, .018);
-      content: "";
     }
 
     .visual svg { position: relative; z-index: 1; width: 90%; max-width: 470px; height: auto; }
@@ -478,8 +434,6 @@
     .hint { color: #667b90; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; }
 
     @media (max-width: 930px) {
-      .grid-5 { grid-template-columns: repeat(3, 1fr); }
-      .w-card { min-height: 135px; }
       .slide { min-height: 650px; }
       .hint { display: none; }
     }
@@ -497,10 +451,6 @@
       .slide-head p { font-size: 13px; }
       .split { grid-template-columns: 1fr; gap: 20px; }
       .visual { min-height: 210px; }
-      .grid-5 { grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 17px; }
-      .w-card { min-height: 126px; padding: 14px; }
-      .w-card p { font-size: 12px; }
-      .w-card strong { margin-bottom: 8px; font-size: 13px; }
       .metric-row, .guard-grid, .decision-grid { grid-template-columns: 1fr; }
       .compare { grid-template-columns: 1fr; }
       .compare-arrow { transform: rotate(90deg); }
@@ -541,47 +491,14 @@
       <div class="footer-note">internal explainer · open with arrow keys</div>
     </section>
 
-    <section class="slide" data-title="5W 한 장 요약">
-      <div class="slide-head">
-        <div>
-          <div class="eyebrow">01 / orientation</div>
-          <h2>5W로 먼저 잡는 전체 그림</h2>
-          <p>save-your-memory는 파일을 대신 보관하는 서비스가 아니라, 흩어진 로컬 자료를 검색·근거화하는 컴파일러입니다.</p>
-        </div>
-        <span class="slide-number">01</span>
-      </div>
-      <div class="grid-5">
-        <article class="w-card"><strong>WHO</strong><p>자료를 찾고 원본 근거를 확인해야 하는 개발팀, 그리고 답변을 만드는 Copilot/Codex.</p></article>
-        <article class="w-card"><strong>WHAT</strong><p>Windows 파일 트리를 SQLite FTS5 카탈로그와 Markdown 위키로 컴파일합니다.</p></article>
-        <article class="w-card"><strong>WHY</strong><p>반복 탐색 시간을 줄이고, 답변이 어느 파일에서 왔는지 바로 확인합니다.</p></article>
-        <article class="w-card"><strong>WHERE</strong><p>원본 Root는 읽기 전용, 생성 Home은 별도 경로, 질문은 VS Code Chat에서 실행합니다.</p></article>
-        <article class="w-card"><strong>WHEN</strong><p>최초 인덱싱, 변경분 갱신, 검색, 변환기 재시도, 상태·일관성 점검 때 사용합니다.</p></article>
-      </div>
-      <div class="visual" style="min-height: 190px; margin-top: 22px">
-        <svg viewBox="0 0 760 155" role="img" aria-label="5W가 하나의 근거 검색 흐름으로 연결되는 도식">
-          <defs><linearGradient id="fiveGradient" x1="0" x2="1"><stop stop-color="#ff7659"/><stop offset="1" stop-color="#6ee7f5"/></linearGradient></defs>
-          <path d="M64 78 H688" stroke="url(#fiveGradient)" stroke-width="2" stroke-dasharray="5 8" opacity=".7"/>
-          <g font-family="Segoe UI, Malgun Gothic, sans-serif" text-anchor="middle">
-            <g transform="translate(76 78)"><circle r="38" fill="#ff7659" fill-opacity=".15" stroke="#ff7659"/><text y="-3" fill="#ffb39d" font-size="12" font-weight="700">WHO</text><text y="15" fill="#d8e3ed" font-size="10">사람·에이전트</text></g>
-            <g transform="translate(229 78)"><circle r="38" fill="#8fb7ff" fill-opacity=".14" stroke="#8fb7ff"/><text y="-3" fill="#b9d0ff" font-size="12" font-weight="700">WHAT</text><text y="15" fill="#d8e3ed" font-size="10">컴파일 산출물</text></g>
-            <g transform="translate(382 78)"><circle r="38" fill="#d7f49a" fill-opacity=".12" stroke="#d7f49a"/><text y="-3" fill="#d7f49a" font-size="12" font-weight="700">WHY</text><text y="15" fill="#d8e3ed" font-size="10">근거·재탐색</text></g>
-            <g transform="translate(535 78)"><circle r="38" fill="#6ee7f5" fill-opacity=".13" stroke="#6ee7f5"/><text y="-3" fill="#6ee7f5" font-size="12" font-weight="700">WHERE</text><text y="15" fill="#d8e3ed" font-size="10">Root·Home·Chat</text></g>
-            <g transform="translate(688 78)"><circle r="38" fill="#ff7659" fill-opacity=".15" stroke="#ff7659"/><text y="-3" fill="#ffb39d" font-size="12" font-weight="700">WHEN</text><text y="15" fill="#d8e3ed" font-size="10">운영 순간</text></g>
-          </g>
-        </svg>
-        <span class="visual-label">five questions / one evidence loop</span>
-      </div>
-      <div class="footer-note">save-your-memory · 5W map</div>
-    </section>
-
     <section class="slide" data-title="WHO">
       <div class="slide-head">
         <div>
-          <div class="eyebrow">02 / who</div>
+          <div class="eyebrow">01 / who</div>
           <h2>누가 쓰는가: 팀의 기억을 찾는 세 역할</h2>
           <p>사람이 자료를 소유하고, 인덱서가 구조화하며, Copilot/Codex가 근거를 읽어 답변합니다.</p>
         </div>
-        <span class="slide-number">02</span>
+        <span class="slide-number">01</span>
       </div>
       <div class="split">
         <div class="stack">
@@ -626,11 +543,11 @@
     <section class="slide" data-title="WHAT">
       <div class="slide-head">
         <div>
-          <div class="eyebrow">03 / what</div>
+          <div class="eyebrow">02 / what</div>
           <h2>무엇인가: 파일 폴더를 두 개의 근거 산출물로 컴파일</h2>
           <p>한 번의 인덱싱이 검색용 카탈로그와 사람이 읽을 수 있는 provenance 위키를 함께 만듭니다.</p>
         </div>
-        <span class="slide-number">03</span>
+        <span class="slide-number">02</span>
       </div>
       <div class="split top">
         <div>
@@ -666,11 +583,11 @@
     <section class="slide" data-title="WHY">
       <div class="slide-head">
         <div>
-          <div class="eyebrow">04 / why</div>
-          <h2>왜 필요한가: 검색보다 어려운 것은 근거 추적</h2>
-          <p>팀의 문서가 많아질수록 “어디에 있지?”와 “그 답은 어느 원본이지?”가 분리됩니다.</p>
+          <div class="eyebrow">03 / why</div>
+          <h2>왜 만들었나: 자료와 내용을 찾고 기억하기 어려워서</h2>
+          <p>어떤 자료가 어디에 있는지 찾지 못하고, 어떤 내용이 어디에 있는지 기억나지 않는 경우가 많습니다. 이 문제를 해소하기 위해 만들었습니다.</p>
         </div>
-        <span class="slide-number">04</span>
+        <span class="slide-number">03</span>
       </div>
       <div class="compare">
         <article class="compare-panel before">
@@ -711,11 +628,11 @@
     <section class="slide" data-title="WHERE">
       <div class="slide-head">
         <div>
-          <div class="eyebrow">05 / where</div>
+          <div class="eyebrow">04 / where</div>
           <h2>어디에 놓이는가: Root와 Home을 분리</h2>
           <p>원본 자료와 생성 데이터를 분리해야 안전성과 재생성 가능성을 동시에 얻습니다.</p>
         </div>
-        <span class="slide-number">05</span>
+        <span class="slide-number">04</span>
       </div>
       <div class="split">
         <div class="stack">
@@ -757,11 +674,11 @@
     <section class="slide" data-title="WHEN">
       <div class="slide-head">
         <div>
-          <div class="eyebrow">06 / when</div>
+          <div class="eyebrow">05 / when</div>
           <h2>언제 쓰는가: 한 번의 구축, 반복되는 운영</h2>
           <p>watcher가 계속 도는 방식이 아니라, 필요한 운영 순간에 명시적으로 갱신하고 점검합니다.</p>
         </div>
-        <span class="slide-number">06</span>
+        <span class="slide-number">05</span>
       </div>
       <div class="timeline">
         <div class="time-row"><span class="time-mark">T0 / 처음</span><strong>최초 인덱싱</strong><span><code>index</code>가 전체를 스캔하고 wiki·SQLite를 생성합니다.</span></div>
@@ -789,11 +706,11 @@
     <section class="slide" data-title="검색 흐름">
       <div class="slide-head">
         <div>
-          <div class="eyebrow">07 / retrieval</div>
+          <div class="eyebrow">06 / retrieval</div>
           <h2>질문 한 줄이 근거가 되는 과정</h2>
           <p>검색 계층과 답변 계층을 분리해, Copilot이 먼저 찾고 그 뒤에 설명하게 합니다.</p>
         </div>
-        <span class="slide-number">07</span>
+        <span class="slide-number">06</span>
       </div>
       <div class="flow" style="margin-top: 35px">
         <div class="flow-step"><span class="step-no">01 / ASK</span><strong>질문 그대로 입력</strong><p>키워드 요약을 임의로 만들지 않고 사용자의 자연어 질문을 그대로 검색합니다.</p></div>
@@ -823,11 +740,11 @@
     <section class="slide" data-title="팀 활용">
       <div class="slide-head">
         <div>
-          <div class="eyebrow">08 / team use</div>
+          <div class="eyebrow">07 / team use</div>
           <h2>자동보정선행개발팀에서 바로 던질 질문</h2>
           <p>자료를 요약하는 것보다 “조건·변경·근거”를 함께 묻는 질문이 효과적입니다.</p>
         </div>
-        <span class="slide-number">08</span>
+        <span class="slide-number">07</span>
       </div>
       <div class="prompt-list">
         <div class="prompt"><span class="prompt-label">설계 근거</span><code>온도 보정 알고리즘의 설계 조건과 변경 이력을 찾아 원본 링크와 함께 요약해줘.</code></div>
@@ -855,11 +772,11 @@
     <section class="slide" data-title="Copilot 사용법">
       <div class="slide-head">
         <div>
-          <div class="eyebrow">09 / vscode copilot</div>
+          <div class="eyebrow">08 / vscode copilot</div>
           <h2>VS Code GitHub Copilot Chat에서 전부 실행</h2>
           <p>별도 터미널을 직접 입력하지 않아도 Agent 스킬이 bundled Python CLI를 호출합니다.</p>
         </div>
-        <span class="slide-number">09</span>
+        <span class="slide-number">08</span>
       </div>
       <div class="split">
         <div class="stack">
@@ -900,11 +817,11 @@
     <section class="slide" data-title="안전 계약">
       <div class="slide-head">
         <div>
-          <div class="eyebrow">10 / safety contract</div>
+          <div class="eyebrow">09 / safety contract</div>
           <h2>팀에 설명해야 할 운영 계약</h2>
           <p>검색 편의보다 먼저 합의할 것은 원본 보호, 생성 데이터 경계, 실패의 투명성입니다.</p>
         </div>
-        <span class="slide-number">10</span>
+        <span class="slide-number">09</span>
       </div>
       <div class="split">
         <div>
@@ -936,11 +853,11 @@
     <section class="slide" data-title="기능 전체">
       <div class="slide-head">
         <div>
-          <div class="eyebrow">11 / complete surface</div>
+          <div class="eyebrow">10 / complete surface</div>
           <h2>기능은 네 명령으로 나뉩니다</h2>
           <p>Copilot Chat에서는 자연어로 요청하지만, 내부적으로는 아래 CLI 계약이 실행됩니다.</p>
         </div>
-        <span class="slide-number">11</span>
+        <span class="slide-number">10</span>
       </div>
       <div class="split">
         <div class="terminal" role="img" aria-label="save-your-memory CLI 명령 예시">
@@ -982,11 +899,11 @@
     <section class="slide" data-title="도입 판단">
       <div class="slide-head">
         <div>
-          <div class="eyebrow">12 / decision</div>
+          <div class="eyebrow">11 / decision</div>
           <h2>우리 팀에 도입할 때의 판단 기준</h2>
           <p>작게 시작해 검색 품질과 근거 연결을 확인한 뒤, 원본 범위를 늘리는 접근이 안전합니다.</p>
         </div>
-        <span class="slide-number">12</span>
+        <span class="slide-number">11</span>
       </div>
       <div class="decision-grid">
         <article class="decision"><h3 style="color: var(--lime)">잘 맞는 경우</h3><ul><li>문서가 로컬 Windows 폴더에 흩어져 있음</li><li>파일 위치와 원본 링크가 중요한 답변을 자주 만듦</li><li>Python 3.11+와 SQLite FTS5를 사용할 수 있음</li><li>Copilot/Codex를 답변 계층으로 사용함</li></ul></article>
@@ -1013,7 +930,7 @@
     </section>
 
     <section class="slide closing" data-title="마무리">
-      <div class="eyebrow">13 / close</div>
+      <div class="eyebrow">12 / close</div>
       <h2>기억을 자동화한다는 말의 실제 의미</h2>
       <p class="lead">문서를 대신 판단하는 것이 아니라,<br>팀이 다시 찾고 다시 확인할 수 있게 만드는 것입니다.</p>
       <div class="tag-row">
@@ -1040,7 +957,7 @@
   <nav class="controls" aria-label="슬라이드 제어">
     <button type="button" data-action="prev" aria-label="이전 슬라이드">←</button>
     <button type="button" data-action="next" aria-label="다음 슬라이드">→</button>
-    <span class="counter" aria-live="polite">01 / 14</span>
+    <span class="counter" aria-live="polite">01 / 13</span>
     <div class="progress" aria-hidden="true"><span></span></div>
     <span class="hint">← → · space · home/end · F fullscreen</span>
     <button type="button" data-action="fullscreen" aria-label="전체 화면">⛶</button>
